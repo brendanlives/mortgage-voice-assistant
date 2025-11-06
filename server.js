@@ -22,7 +22,9 @@ function twimlResponse(connectStreamUrl) {
 app.post('/twilio/voice', (req, res) => {
   const callSid = req.body.CallSid || uuidv4();
   const publicBase = process.env.PUBLIC_BASE_URL || `https://example.com`;
-  const wsUrl = `${publicBase.replace(/\/$/, '')}/twilio-stream?callSid=${callSid}`;
+  // convert http(s) to ws(s) for Twilio Media Streams
+  const wsBase = publicBase.replace(/^http/, 'ws');
+  const wsUrl = `${wsBase.replace(/\/$/, '')}/twilio-stream?callSid=${callSid}`;
   const twiml = twimlResponse(wsUrl);
   res.set('Content-Type', 'text/xml');
   res.send(twiml);
