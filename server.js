@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
+import { mulawToPcm, pcmToMulaw } from 'mulaw-decoder'; // Handles mulaw ↔ PCM16
+import { resample } from 'pcm-util'; // Resample 8kHz ↔ 24kHz
 
 const app = express();
 app.use(bodyParser.json({ limit: '2mb' }));
@@ -18,11 +20,10 @@ function twimlResponse(connectStreamUrl) {
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${connectStreamUrl}"/></Connect></Response>`;
 }
 
-// --- Voice webhook: returns TwiML to start Twilio <Stream> ---
+// --- Voice webhook ---
 app.post('/twilio/voice', (req, res) => {
   const callSid = req.body.CallSid || uuidv4();
   const publicBase = process.env.PUBLIC_BASE_URL || `https://example.com`;
-  // convert http(s) to ws(s) for Twilio Media Streams
   const wsBase = publicBase.replace(/^http/, 'ws');
   const wsUrl = `${wsBase.replace(/\/$/, '')}/twilio-stream?callSid=${callSid}`;
   const twiml = twimlResponse(wsUrl);
@@ -30,7 +31,7 @@ app.post('/twilio/voice', (req, res) => {
   res.send(twiml);
 });
 
-// --- Lead capture + Calendly handoff (sample) ---
+// --- Lead capture ---
 app.post('/lead', async (req, res) => {
   const { name, phone, email, topic } = req.body || {};
   console.log('Lead received:', { name, phone, email, topic });
@@ -47,7 +48,7 @@ app.get('/', (req, res) => {
   res.json({ ok: true, service: 'Mortgage Voice Assistant', time: new Date().toISOString() });
 });
 
-// --- Notifications (SMS + Email) ---
+// --- Notifications ---
 const twilioClient = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
   : null;
@@ -73,7 +74,7 @@ const mailer = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
   secure: String(process.env.SMTP_SECURE || 'false') === 'true',
-  auth: { user: process.env.SMPP_USER || process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
 });
 
 async function sendEmail({ subject, html }) {
@@ -94,7 +95,7 @@ async function sendEmail({ subject, html }) {
   }
 }
 
-// --- TLDR summarizer (OpenAI chat) ---
+// --- TLDR summarizer ---
 async function summarizeTLDR(transcript) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -115,7 +116,7 @@ async function summarizeTLDR(transcript) {
   }
 }
 
-// --- “Apply Now” link: on-demand SMS endpoint ---
+// --- Apply Now SMS ---
 app.post('/notify/send-application', async (req, res) => {
   const { to } = req.body || {};
   const link = process.env.APPLICATION_LINK || 'https://movement.com/lo/brendan-burns';
@@ -125,45 +126,15 @@ app.post('/notify/send-application', async (req, res) => {
   res.json({ ok: true, result: r });
 });
 
-// --- HTTP server + WS upgrade for Twilio stream ---
-const server = app.listen(PORT, () => {
-  console.log(`Server listening on :${PORT}`);
-});
-
-const wss = new WebSocketServer({ noServer: true });
-
-server.on('upgrade', (req, socket, head) => {
-  const url = new URL(req.url, 'http://localhost');
-  if (url.pathname === '/twilio-stream') {
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req);
-    });
-  } else {
-    socket.destroy();
-  }
-});
-
-// --- OpenAI Realtime WebSocket connection ---
-async function createOpenAIRealtimeSocket() {
-  const { WebSocket } = await import('ws');
-  const model = 'gpt-realtime'; // verify latest model name
-  const url = `wss://api.openai.com/v1/realtime?model=${model}`;
-  const headers = {
-    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                // 'OpenAI-Beta': 'realtime-v1'
-    
-
-  return new WebSocket(url, { headers });
-}
-
-// --- Mortgage math + simple local info ---
+// --- Mortgage math ---
 function calcMonthlyPayment({ price, downPct = 0.05, rate = 0.07, termYears = 30, tax = 0, insurance = 0, mi = 0 }) {
   const loan = price * (1 - downPct);
   const n = termYears * 12;
   const r = rate / 12;
-  const pAndI = (r === 0) ? (loan / n)
+  const pAndI = (r === 0)
+    ? (loan / n)
     : (loan * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-  return Math.round((pAndI + tax/12 + insurance/12 + mi) * 100) / 100;
+  return Math.round((pAndI + tax / 12 + insurance / 12 + mi) * 100) / 100;
 }
 
 const buffaloCheat = {
@@ -186,63 +157,88 @@ app.get('/tools/buffalo_info', (req, res) => {
   res.json({ ok: true, buffalo: buffaloCheat });
 });
 
-// --- Twilio stream <-> OpenAI Realtime bridge (simplified) ---
+// --- HTTP + WS server ---
+const server = app.listen(PORT, () => {
+  console.log(`Server listening on :${PORT}`);
+});
+
+const wss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/twilio-stream') {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+// --- OpenAI Realtime WS ---
+async function createOpenAIRealtimeSocket() {
+  const { default: WebSocket } = await import('ws');
+  const model = 'gpt-4o-realtime-preview-2024-10-01';
+  const url = `wss://api.openai.com/v1/realtime?model=${model}`;
+  const oai = new WebSocket(url, {
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      'OpenAI-Beta': 'realtime=v1'
+    },
+    perMessageDeflate: false
+  });
+
+  oai.on('error', (err) => console.error('OpenAI WS error:', err.message));
+  oai.on('open', () => console.log('OpenAI Realtime connected'));
+
+  return oai;
+}
+
+// --- Twilio ↔ OpenAI Bridge ---
 wss.on('connection', async (ws, req) => {
   const url = new URL(req.url, 'http://localhost');
   const callSid = url.searchParams.get('callSid') || uuidv4();
   console.log('Twilio stream connected', callSid);
 
   let transcriptParts = [];
-  let callerNumber = null; // populate if available
-  // Store the Twilio Media Stream SID from the 'start' event. This is required
-  // when sending synthesized audio back to Twilio. If not set, audio messages
-  // will be rejected as invalid.
+  let callerNumber = null;
   let twilioStreamSid = null;
-  // Track outbound media sequence and chunk numbers and the time the stream
-  // started so we can construct valid media messages for Twilio.  Twilio
-  // requires sequenceNumber, chunk, timestamp and track on each outbound
-  // media message.  These counters are initialized once a call begins.
   let outboundSequence = 1;
   let outboundChunk = 1;
   let streamStartTime = null;
+  let commitPending = false;
 
   const oai = await createOpenAIRealtimeSocket();
 
+  // --- OpenAI → Twilio (audio + text) ---
   oai.on('message', (message) => {
     try {
       const evt = JSON.parse(message.toString());
 
-      // Capture assistant text (for TLDR/transcript)
       if (evt.type === 'response.output_text.delta' && evt.delta) {
         transcriptParts.push(`[AI] ${evt.delta}`);
       }
 
-      // Forward synthesized audio to Twilio. Twilio requires a valid streamSid
-      // and specific fields (sequenceNumber, media.track, media.chunk, media.timestamp)
-      // on each outbound media message. If the stream SID has not been set yet
-      // (we haven't received the 'start' message), skip sending audio.
-      if (evt.type === 'response.audio.delta') {
-        if (!twilioStreamSid) {
-          // Skip sending audio until we have a valid stream SID from Twilio.
-          return;
-        }
-        // Compute timestamp relative to when the stream started.  If we haven't
-        // recorded a start time, fall back to 0.  Note: Twilio expects this
-        // value in milliseconds.
+      if (evt.type === 'response.audio.delta' && evt.delta && twilioStreamSid) {
         const now = Date.now();
         const ts = streamStartTime ? Math.floor(now - streamStartTime) : 0;
-        // Build a Twilio media message compliant with the protocol.  See
-        // https://www.twilio.com/docs/voice/media-streams/websocket-messages for details.
+
+        // OpenAI: PCM16 24kHz → Twilio: mulaw 8kHz
+        const pcm24kBuffer = Buffer.from(evt.delta, 'base64');
+        const pcm8kBuffer = resample(pcm24kBuffer, 24000, 8000, { method: 'sinc' });
+        const mulawBuffer = pcmToMulaw(pcm8kBuffer);
+        const payload = mulawBuffer.toString('base64');
+
         const twilioMsgObj = {
           event: 'media',
+          streamSid: twilioStreamSid,
           sequenceNumber: String(outboundSequence++),
           media: {
             track: 'outbound',
             chunk: String(outboundChunk++),
             timestamp: String(ts),
-            payload: evt.audio
-          },
-          streamSid: twilioStreamSid
+            payload
+          }
         };
         ws.send(JSON.stringify(twilioMsgObj));
       }
@@ -253,86 +249,98 @@ wss.on('connection', async (ws, req) => {
 
   oai.on('close', () => console.log('Realtime socket closed for', callSid));
 
+  // --- Twilio → OpenAI ---
   ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
 
       if (msg.event === 'start') {
-        // Extract the media stream SID from the start message. This will be
-        // used when sending audio back to Twilio via the media event. Without
-        // a valid streamSid, Twilio will reject the message.
-        try {
-          twilioStreamSid = (msg.start && msg.start.streamSid) || msg.streamSid || null;
-        } catch (e) {
-          console.warn('Unable to extract streamSid from start message', e);
-        }
-        // Record the time when the stream starts so outbound timestamps can be
-        // computed relative to this moment.  This will be used to populate
-        // the media.timestamp field on outbound messages.
+        twilioStreamSid = msg.start?.streamSid || msg.streamSid || null;
         streamStartTime = Date.now();
-        try { callerNumber = msg?.start?.from || null; } catch {}
-        
+        callerNumber = msg?.start?.from || null;
+
         const sys = {
           type: 'session.update',
           session: {
             instructions: `
-        You are Brendan's AI assistant for mortgages and real estate in Buffalo, NY. You have a gay male super-bright, chirpy, upbeat personality and speak with a friendly, cheerful tone. Always introduce yourself as Brendan's AI assistant.
+You are Brendan's AI assistant for mortgages and real estate in Buffalo, NY. 
+You have a bright, upbeat, professional tone and always introduce yourself as Brendan's AI assistant.
 
-        Capabilities:
-        - Hold a conversation and answer any mortgage or real estate question, including complex mortgage guideline questions about Fannie Mae, Freddie Mac, VA, FHA, and USDA.
-        - Qualify callers (purchase/refi/VA/FHA/USDA/Conventional; price/down/credit band/DTI guess).
-        - Estimate payments using the calc tool when asked.
-        - Offer to text the loan application link when appropriate.
-        - Take messages and let callers know they can ask for anything.
-        - Book meetings using CALENDLY_LINK if provided.
-        - Provide Buffalo-local context (taxes, attorney fees, typical closing costs).
+Capabilities:
+- Hold a conversation and answer any mortgage or real estate question, including complex mortgage guideline questions about Fannie Mae, Freddie Mac, VA, FHA, and USDA.
+- Qualify callers (purchase/refi/VA/FHA/USDA/Conventional; price/down/credit band/DTI guess).
+- Estimate payments using the calc tool when asked.
+- Offer to text the loan application link when appropriate.
+- Take messages and let callers know they can ask for anything.
+- Book meetings using CALENDLY_LINK if provided.
+- Provide Buffalo-local context (taxes, attorney fees, typical closing costs).
 
-        Compliance:
-        - Not a commitment to lend. Estimates only. Terms subject to underwriting.
-        - Avoid any prohibited-basis discussions. Offer to connect with a licensed loan officer for specifics.
-        - Always be respectful and inclusive.
-            `.trim(),
-            modalities: ['text','audio']
+Compliance:
+- Not a commitment to lend. Estimates only. Terms subject to underwriting.
+- Avoid any prohibited-basis discussions. Offer to connect with a licensed loan officer for specifics.
+- Always be respectful and inclusive.
+`.trim(),
+            modalities: ['text', 'audio'],
+            voice: 'alloy',
+            input_audio_format: 'pcm16',
+            output_audio_format: 'pcm16',
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 600
+            }
           }
         };
-
         oai.send(JSON.stringify(sys));
+      }
 
-      } else if (msg.event === 'media' && msg.media && msg.media.payload) {
-        // Forward incoming audio frame to OpenAI
-        const frame = {
+      else if (msg.event === 'media' && msg.media?.payload) {
+        // Twilio: mulaw 8kHz → OpenAI: PCM16 24kHz
+        const mulawBuffer = Buffer.from(msg.media.payload, 'base64');
+        const pcm8k = mulawToPcm(mulawBuffer); // Int16Array
+        const pcm8kBuffer = Buffer.from(pcm8k.buffer, pcm8k.byteOffset, pcm8k.byteLength);
+        const pcm24kBuffer = resample(pcm8kBuffer, 8000, 24000, { method: 'sinc' });
+        const base64Pcm = pcm24kBuffer.toString('base64');
+
+        oai.send(JSON.stringify({
           type: 'input_audio_buffer.append',
-          audio: msg.media.payload // base64 mu-law 8k from Twilio
-        };
-        oai.send(JSON.stringify(frame));
+          audio: base64Pcm
+        }));
 
-      } else if (msg.event === 'stop') {
-        // Ask OpenAI to respond and then do follow-up notifications
+        // Throttle commits to avoid overload
+        if (!commitPending) {
+          commitPending = true;
+          setTimeout(() => {
+            oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+            commitPending = false;
+          }, 100);
+        }
+      }
+
+      else if (msg.event === 'stop') {
         oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-        oai.send(JSON.stringify({ type: 'response.create', response: { modalities: ['audio','text'] } }));
+        oai.send(JSON.stringify({ type: 'response.create', response: { modalities: ['audio', 'text'] } }));
 
         setTimeout(async () => {
           try {
             const transcript = transcriptParts.join('\n').trim();
             const tldr = await summarizeTLDR(transcript);
             const appLink = process.env.APPLICATION_LINK || 'https://movement.com/lo/brendan-burns';
-
             if (process.env.AUTO_FOLLOW_UP === 'true' && callerNumber) {
               await sendSMS(callerNumber, `Thanks for calling Brendan's team. Start your application here: ${appLink}`);
             }
-
             const html = `
-              <h2>Call Summary (Auto TLDR)</h2>
-              <pre style="white-space:pre-wrap;">${tldr}</pre>
-              <hr/>
-              <h3>Full Transcript (assistant side)</h3>
-              <pre style="white-space:pre-wrap;">${transcript}</pre>
-            `;
+<h2>Call Summary (Auto TLDR)</h2>
+<pre style="white-space:pre-wrap;">${tldr}</pre>
+<hr/>
+<h3>Full Transcript (assistant side)</h3>
+<pre style="white-space:pre-wrap;">${transcript}</pre>`;
             await sendEmail({ subject: 'New Call — TLDR + Transcript', html });
           } catch (e) {
             console.error('Follow-up error', e?.message);
           }
-        }, 1000);
+        }, 1500);
       }
     } catch (e) {
       console.error('Bad WS message', e);
