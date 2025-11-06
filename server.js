@@ -146,11 +146,11 @@ server.on('upgrade', (req, socket, head) => {
 // --- OpenAI Realtime WebSocket connection ---
 async function createOpenAIRealtimeSocket() {
   const { WebSocket } = await import('ws');
-  const model = 'gpt-4o-realtime-preview'; // verify latest model name
+  const model = 'gpt-realtime'; // verify latest model name
   const url = `wss://api.openai.com/v1/realtime?model=${model}`;
   const headers = {
     'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-    'OpenAI-Beta': 'realtime=v1'
+    // 'OpenAI-Beta': 'realtime=v1'
   };
   return new WebSocket(url, { headers });
 }
