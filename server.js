@@ -193,6 +193,10 @@ wss.on('connection', async (ws, req) => {
 
   let transcriptParts = [];
   let callerNumber = null; // populate if available
+  // Store the Twilio Media Stream SID from the 'start' event. This is required
+  // when sending synthesized audio back to Twilio. If not set, audio messages
+  // will be rejected as invalid.
+  let twilioStreamSid = null;
 
   const oai = await createOpenAIRealtimeSocket();
 
@@ -205,10 +209,12 @@ wss.on('connection', async (ws, req) => {
         transcriptParts.push(`[AI] ${evt.delta}`);
       }
 
-      // Forward synthesized audio to Twilio
+      // Forward synthesized audio to Twilio. Twilio requires a valid streamSid
+      // for each media message, which we capture from the 'start' event.
       if (evt.type === 'response.audio.delta') {
         const twilioMsg = JSON.stringify({
           event: 'media',
+          streamSid: twilioStreamSid,
           media: { payload: evt.audio }
         });
         ws.send(twilioMsg);
@@ -225,6 +231,14 @@ wss.on('connection', async (ws, req) => {
       const msg = JSON.parse(data.toString());
 
       if (msg.event === 'start') {
+        // Extract the media stream SID from the start message. This will be
+        // used when sending audio back to Twilio via the media event. Without
+        // a valid streamSid, Twilio will reject the message.
+        try {
+          twilioStreamSid = (msg.start && msg.start.streamSid) || msg.streamSid || null;
+        } catch (e) {
+          console.warn('Unable to extract streamSid from start message', e);
+        }
         try { callerNumber = msg?.start?.from || null; } catch {}
         
         const sys = {
