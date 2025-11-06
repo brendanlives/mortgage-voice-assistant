@@ -150,7 +150,7 @@ async function createOpenAIRealtimeSocket() {
   const url = `wss://api.openai.com/v1/realtime?model=${model}`;
   const headers = {
     'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            // // 'OpenAI-Beta': 'realtime-v1'
+                // 'OpenAI-Beta': 'realtime-v1'
     
 
   return new WebSocket(url, { headers });
