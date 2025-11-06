@@ -197,6 +197,13 @@ wss.on('connection', async (ws, req) => {
   // when sending synthesized audio back to Twilio. If not set, audio messages
   // will be rejected as invalid.
   let twilioStreamSid = null;
+  // Track outbound media sequence and chunk numbers and the time the stream
+  // started so we can construct valid media messages for Twilio.  Twilio
+  // requires sequenceNumber, chunk, timestamp and track on each outbound
+  // media message.  These counters are initialized once a call begins.
+  let outboundSequence = 1;
+  let outboundChunk = 1;
+  let streamStartTime = null;
 
   const oai = await createOpenAIRealtimeSocket();
 
@@ -210,14 +217,33 @@ wss.on('connection', async (ws, req) => {
       }
 
       // Forward synthesized audio to Twilio. Twilio requires a valid streamSid
-      // for each media message, which we capture from the 'start' event.
+      // and specific fields (sequenceNumber, media.track, media.chunk, media.timestamp)
+      // on each outbound media message. If the stream SID has not been set yet
+      // (we haven't received the 'start' message), skip sending audio.
       if (evt.type === 'response.audio.delta') {
-        const twilioMsg = JSON.stringify({
+        if (!twilioStreamSid) {
+          // Skip sending audio until we have a valid stream SID from Twilio.
+          return;
+        }
+        // Compute timestamp relative to when the stream started.  If we haven't
+        // recorded a start time, fall back to 0.  Note: Twilio expects this
+        // value in milliseconds.
+        const now = Date.now();
+        const ts = streamStartTime ? Math.floor(now - streamStartTime) : 0;
+        // Build a Twilio media message compliant with the protocol.  See
+        // https://www.twilio.com/docs/voice/media-streams/websocket-messages for details.
+        const twilioMsgObj = {
           event: 'media',
-          streamSid: twilioStreamSid,
-          media: { payload: evt.audio }
-        });
-        ws.send(twilioMsg);
+          sequenceNumber: String(outboundSequence++),
+          media: {
+            track: 'outbound',
+            chunk: String(outboundChunk++),
+            timestamp: String(ts),
+            payload: evt.audio
+          },
+          streamSid: twilioStreamSid
+        };
+        ws.send(JSON.stringify(twilioMsgObj));
       }
     } catch (e) {
       console.error('Error parsing OAI message', e);
@@ -239,6 +265,10 @@ wss.on('connection', async (ws, req) => {
         } catch (e) {
           console.warn('Unable to extract streamSid from start message', e);
         }
+        // Record the time when the stream starts so outbound timestamps can be
+        // computed relative to this moment.  This will be used to populate
+        // the media.timestamp field on outbound messages.
+        streamStartTime = Date.now();
         try { callerNumber = msg?.start?.from || null; } catch {}
         
         const sys = {
