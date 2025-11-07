@@ -7,9 +7,11 @@ import axios from 'axios';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
 import pkg from 'alawmulaw';
-import { resample } from 'pcm-util'; // Resample 8 kHz ↔ 24 kHz
+import pcmUtil from 'pcm-util'; // CommonJS module
 
+// Extract APIs from the imported CommonJS modules
 const { mulaw } = pkg;
+const { resample } = pcmUtil;
 const { decode: mulawToPcm, encode: pcmToMulaw } = mulaw;
 
 const app = express();
@@ -325,10 +327,12 @@ Compliance:
         const pcm24kBuffer = resample(pcm8kBuffer, 8000, 24000, { method: 'sinc' });
         const base64Pcm = pcm24kBuffer.toString('base64');
 
-        oai.send(JSON.stringify({
-          type: 'input_audio_buffer.append',
-          audio: base64Pcm,
-        }));
+        oai.send(
+          JSON.stringify({
+            type: 'input_audio_buffer.append',
+            audio: base64Pcm,
+          })
+        );
 
         // Throttle commits to avoid overload
         if (!commitPending) {
@@ -348,7 +352,10 @@ Compliance:
             const tldr = await summarizeTLDR(transcript);
             const appLink = process.env.APPLICATION_LINK || 'https://movement.com/lo/brendan-burns';
             if (process.env.AUTO_FOLLOW_UP === 'true' && callerNumber) {
-              await sendSMS(callerNumber, `Thanks for calling Brendan's team. Start your application here: ${appLink}`);
+              await sendSMS(
+                callerNumber,
+                `Thanks for calling Brendan's team. Start your application here: ${appLink}`
+              );
             }
             const html = `
 <h2>Call Summary (Auto TLDR)</h2>
