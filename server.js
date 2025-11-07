@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
-import { mulawToPcm, pcmToMulaw } from 'mulaw-decoder'; // Handles mulaw ↔ PCM16
+import { decode as mulawToPcm, encode as pcmToMulaw } from 'alawmulaw/mulaw';
 import { resample } from 'pcm-util'; // Resample 8kHz ↔ 24kHz
 
 const app = express();
@@ -226,8 +226,16 @@ wss.on('connection', async (ws, req) => {
         // OpenAI: PCM16 24kHz → Twilio: mulaw 8kHz
         const pcm24kBuffer = Buffer.from(evt.delta, 'base64');
         const pcm8kBuffer = resample(pcm24kBuffer, 24000, 8000, { method: 'sinc' });
-        const mulawBuffer = pcmToMulaw(pcm8kBuffer);
-        const payload = mulawBuffer.toString('base64');
+            // Convert the 8 kHz PCM buffer to an Int16Array for encoding
+    const pcm8kInt16 = new Int16Array(
+      pcm8kBuffer.buffer,
+      pcm8kBuffer.byteOffset,
+      pcm8kBuffer.length / 2
+    );
+    const mulawUint8 = pcmToMulaw(pcm8kInt16);        // Returns a Uint8Array
+    const mulawBuffer = Buffer.from(mulawUint8.buffer);
+    const payload = mulawBuffer.toString('base64');
+
 
         const twilioMsgObj = {
           event: 'media',
