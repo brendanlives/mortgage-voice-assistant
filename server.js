@@ -6,8 +6,12 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
-import { decode as mulawToPcm, encode as pcmToMulaw } from 'alawmulaw/mulaw';
+import { mulaw } from 'alawmulaw';
 import { resample } from 'pcm-util'; // Resample 8kHz ↔ 24kHz
+// destructure the encode/decode functions from the exported `mulaw` module
+const { decode: mulawToPcm, encode: pcmToMulaw } = mulaw;
+
+
 
 const app = express();
 app.use(bodyParser.json({ limit: '2mb' }));
