@@ -255,9 +255,24 @@ wss.on('connection', async (ws, req) => {
   });
 
   // OpenAI to Twilio
+  let sessionConfigured = false;
+  let greetingSent = false;
+  
   oai.on('message', (message) => {
     try {
       const evt = JSON.parse(message.toString());
+      
+      // When session is updated, trigger the greeting
+      if (evt.type === 'session.updated' && !greetingSent) {
+        greetingSent = true;
+        sessionConfigured = true;
+        console.log('[OAI] Session configured, triggering greeting');
+        setTimeout(() => {
+          oai.send(JSON.stringify({
+            type: 'response.create',
+          }));
+        }, 200);
+      }
       
       if (evt.type === 'response.output_text.delta' && evt?.delta) {
         transcriptParts.push(`[AI] ${evt.delta}`);
@@ -353,14 +368,6 @@ Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and 
         
         if (oaiReady) {
           oai.send(JSON.stringify(sessionUpdate));
-          // Trigger initial greeting
-          setTimeout(() => {
-            if (oaiReady) {
-              oai.send(JSON.stringify({
-                type: 'response.create',
-              }));
-            }
-          }, 300);
         } else {
           messageQueue.push(sessionUpdate);
         }
