@@ -222,78 +222,15 @@ wss.on('connection', async (ws, req) => {
   let outboundSeq = 1;
   let outboundChunk = 1;
   let streamStartMs = Date.now();
-  let commitPending = false;
-  let messageQueue = [];
   let oaiReady = false;
+  let oai = null;
 
-  let oai;
-  try {
-    oai = await createOpenAIRealtimeSocket();
-    oaiReady = true;
-    console.log('[WS] OpenAI socket ready for', callSid);
-  } catch (e) {
-    console.error('[WS] ❌ Failed to create OpenAI socket:', e);
-    ws.close();
-    return;
-  }
-
-  oai.on('close', (code, reason) => {
-    console.log('[OAI] ✖︎ Realtime closed', code, String(reason || ''));
-    oaiReady = false;
-  });
-
-  // OpenAI to Twilio  
-  oai.on('message', (message) => {
-    try {
-      const evt = JSON.parse(message.toString());
-      
-      console.log('[OAI] Event:', evt.type); // Debug logging
-      
-      if (evt.type === 'response.output_text.delta' && evt?.delta) {
-        transcriptParts.push(`[AI] ${evt.delta}`);
-      }
-      
-      if (evt.type === 'response.audio.delta' && evt?.delta) {
-        if (!twilioStreamSid) {
-          console.error('[OAI] ❌ Cannot send audio - twilioStreamSid is null!');
-          return;
-        }
-        
-        const pcm24 = Buffer.from(evt.delta, 'base64');
-        const pcm8 = resamplePCM16(pcm24, 24000, 8000);
-        const pcm8Int16 = new Int16Array(pcm8.buffer, pcm8.byteOffset, pcm8.length / 2);
-        const mu = pcmToMulaw(pcm8Int16);
-        const muBuf = Buffer.from(mu.buffer);
-        const payload = muBuf.toString('base64');
-
-        const media = {
-          event: 'media',
-          streamSid: twilioStreamSid,
-          sequenceNumber: String(outboundSeq++),
-          media: {
-            track: 'outbound',
-            chunk: String(outboundChunk++),
-            timestamp: String(Date.now() - streamStartMs),
-            payload,
-          },
-        };
-        
-        console.log('[OAI->Twilio] Sending audio chunk', outboundChunk - 1);
-        ws.send(JSON.stringify(media));
-      }
-      
-      if (evt.type === 'error') {
-        console.error('[OAI] ❌ Error event:', evt);
-      }
-    } catch (err) {
-      console.error('[WS] ❌ handle OAI message error:', err);
-    }
-  });
-
-  // Twilio to OpenAI
+  // Register Twilio message handler FIRST (before OpenAI connection)
   ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
+      
+      console.log('[Twilio] Received event:', msg.event);
       
       if (msg.event === 'start') {
         twilioStreamSid = msg.start?.streamSid || msg.streamSid || null;
@@ -301,6 +238,12 @@ wss.on('connection', async (ws, req) => {
         streamStartMs = Date.now();
         
         console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
+        
+        if (!oaiReady) {
+          console.log('[WS] ⚠️  OpenAI not ready yet, waiting...');
+          return;
+        }
+        
         console.log('[WS] Configuring OpenAI session...');
 
         const sessionUpdate = {
@@ -379,6 +322,70 @@ Always speak in English only. Be natural, warm, and conversational.`,
   ws.on('close', () => {
     console.log('[WS] ✖︎ Twilio stream closed', { callSid });
     try { oai?.close(); } catch {}
+  });
+
+  // NOW connect to OpenAI (after Twilio handler is registered)
+  try {
+    oai = await createOpenAIRealtimeSocket();
+    oaiReady = true;
+    console.log('[WS] OpenAI socket ready for', callSid);
+  } catch (e) {
+    console.error('[WS] ❌ Failed to create OpenAI socket:', e);
+    ws.close();
+    return;
+  }
+
+  oai.on('close', (code, reason) => {
+    console.log('[OAI] ✖︎ Realtime closed', code, String(reason || ''));
+    oaiReady = false;
+  });
+
+  // OpenAI to Twilio  
+  oai.on('message', (message) => {
+    try {
+      const evt = JSON.parse(message.toString());
+      
+      console.log('[OAI] Event:', evt.type); // Debug logging
+      
+      if (evt.type === 'response.output_text.delta' && evt?.delta) {
+        transcriptParts.push(`[AI] ${evt.delta}`);
+      }
+      
+      if (evt.type === 'response.audio.delta' && evt?.delta) {
+        if (!twilioStreamSid) {
+          console.error('[OAI] ❌ Cannot send audio - twilioStreamSid is null!');
+          return;
+        }
+        
+        const pcm24 = Buffer.from(evt.delta, 'base64');
+        const pcm8 = resamplePCM16(pcm24, 24000, 8000);
+        const pcm8Int16 = new Int16Array(pcm8.buffer, pcm8.byteOffset, pcm8.length / 2);
+        const mu = pcmToMulaw(pcm8Int16);
+        const muBuf = Buffer.from(mu.buffer);
+        const payload = muBuf.toString('base64');
+
+        const media = {
+          event: 'media',
+          streamSid: twilioStreamSid,
+          sequenceNumber: String(outboundSeq++),
+          media: {
+            track: 'outbound',
+            chunk: String(outboundChunk++),
+            timestamp: String(Date.now() - streamStartMs),
+            payload,
+          },
+        };
+        
+        console.log('[OAI->Twilio] Sending audio chunk', outboundChunk - 1);
+        ws.send(JSON.stringify(media));
+      }
+      
+      if (evt.type === 'error') {
+        console.error('[OAI] ❌ Error event:', evt);
+      }
+    } catch (err) {
+      console.error('[WS] ❌ handle OAI message error:', err);
+    }
   });
 });
 
