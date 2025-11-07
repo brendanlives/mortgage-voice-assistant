@@ -6,12 +6,11 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
-import { mulaw } from 'alawmulaw';
-import { resample } from 'pcm-util'; // Resample 8kHz ↔ 24kHz
-// destructure the encode/decode functions from the exported `mulaw` module
+import pkg from 'alawmulaw';
+import { resample } from 'pcm-util'; // Resample 8 kHz ↔ 24 kHz
+
+const { mulaw } = pkg;
 const { decode: mulawToPcm, encode: pcmToMulaw } = mulaw;
-
-
 
 const app = express();
 app.use(bodyParser.json({ limit: '2mb' }));
@@ -53,9 +52,10 @@ app.get('/', (req, res) => {
 });
 
 // --- Notifications ---
-const twilioClient = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
-  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-  : null;
+const twilioClient =
+  process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+    ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+    : null;
 
 async function sendSMS(to, body) {
   if (!twilioClient || !process.env.TWILIO_MESSAGING_NUMBER) {
@@ -65,7 +65,8 @@ async function sendSMS(to, body) {
   try {
     const msg = await twilioClient.messages.create({
       from: process.env.TWILIO_MESSAGING_NUMBER,
-      to, body
+      to,
+      body,
     });
     return { ok: true, sid: msg.sid };
   } catch (e) {
@@ -78,7 +79,7 @@ const mailer = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
   secure: String(process.env.SMTP_SECURE || 'false') === 'true',
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 });
 
 async function sendEmail({ subject, html }) {
@@ -90,7 +91,8 @@ async function sendEmail({ subject, html }) {
     const info = await mailer.sendMail({
       from: 'assistant@voicebot.local',
       to: process.env.NOTIFY_EMAIL,
-      subject, html
+      subject,
+      html,
     });
     return { ok: true, id: info.messageId };
   } catch (e) {
@@ -104,15 +106,19 @@ async function summarizeTLDR(transcript) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return 'No summary (no OPENAI_API_KEY).';
-    const resp = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You write crisp 3–6 bullet TLDRs for phone call transcripts.' },
-        { role: 'user', content: `Summarize this call for a loan officer. Include borrower basics and next steps:\n\n${transcript}` }
-      ],
-      temperature: 0.2,
-      max_tokens: 240
-    }, { headers: { Authorization: `Bearer ${apiKey}` }});
+    const resp = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You write crisp 3–6 bullet TLDRs for phone call transcripts.' },
+          { role: 'user', content: `Summarize this call for a loan officer. Include borrower basics and next steps:\n\n${transcript}` },
+        ],
+        temperature: 0.2,
+        max_tokens: 240,
+      },
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    );
     return resp.data?.choices?.[0]?.message?.content?.trim() || 'Summary unavailable.';
   } catch (e) {
     console.error('TLDR error', e?.message);
@@ -131,24 +137,30 @@ app.post('/notify/send-application', async (req, res) => {
 });
 
 // --- Mortgage math ---
-function calcMonthlyPayment({ price, downPct = 0.05, rate = 0.07, termYears = 30, tax = 0, insurance = 0, mi = 0 }) {
+function calcMonthlyPayment({
+  price,
+  downPct = 0.05,
+  rate = 0.07,
+  termYears = 30,
+  tax = 0,
+  insurance = 0,
+  mi = 0,
+}) {
   const loan = price * (1 - downPct);
   const n = termYears * 12;
   const r = rate / 12;
-  const pAndI = (r === 0)
-    ? (loan / n)
-    : (loan * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  const pAndI = r === 0 ? loan / n : (loan * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
   return Math.round((pAndI + tax / 12 + insurance / 12 + mi) * 100) / 100;
 }
 
 const buffaloCheat = {
   taxes_per_1000: 29.0,
   typical_attorney_fee: 900,
-  transfer_tax_seller: "NY State + County, varies; budget 0.4%–0.65% total",
+  transfer_tax_seller: 'NY State + County, varies; budget 0.4%–0.65% total',
   seller_concession_caps: {
-    fha: "Up to 6% of price",
-    conventional_primary: "3% at 90–95% LTV; 6% at 75–90%; 9% at <=75%"
-  }
+    fha: 'Up to 6% of price',
+    conventional_primary: '3% at 90–95% LTV; 6% at 75–90%; 9% at <=75%',
+  },
 };
 
 app.post('/tools/calc_payment', (req, res) => {
@@ -186,10 +198,10 @@ async function createOpenAIRealtimeSocket() {
   const url = `wss://api.openai.com/v1/realtime?model=${model}`;
   const oai = new WebSocket(url, {
     headers: {
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-      'OpenAI-Beta': 'realtime=v1'
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'OpenAI-Beta': 'realtime=v1',
     },
-    perMessageDeflate: false
+    perMessageDeflate: false,
   });
 
   oai.on('error', (err) => console.error('OpenAI WS error:', err.message));
@@ -227,19 +239,19 @@ wss.on('connection', async (ws, req) => {
         const now = Date.now();
         const ts = streamStartTime ? Math.floor(now - streamStartTime) : 0;
 
-        // OpenAI: PCM16 24kHz → Twilio: mulaw 8kHz
+        // OpenAI: PCM16 24 kHz → Twilio: μ‑law 8 kHz
         const pcm24kBuffer = Buffer.from(evt.delta, 'base64');
         const pcm8kBuffer = resample(pcm24kBuffer, 24000, 8000, { method: 'sinc' });
-            // Convert the 8 kHz PCM buffer to an Int16Array for encoding
-    const pcm8kInt16 = new Int16Array(
-      pcm8kBuffer.buffer,
-      pcm8kBuffer.byteOffset,
-      pcm8kBuffer.length / 2
-    );
-    const mulawUint8 = pcmToMulaw(pcm8kInt16);        // Returns a Uint8Array
-    const mulawBuffer = Buffer.from(mulawUint8.buffer);
-    const payload = mulawBuffer.toString('base64');
 
+        // Convert the 8 kHz PCM buffer to an Int16Array for encoding
+        const pcm8kInt16 = new Int16Array(
+          pcm8kBuffer.buffer,
+          pcm8kBuffer.byteOffset,
+          pcm8kBuffer.length / 2
+        );
+        const mulawUint8 = pcmToMulaw(pcm8kInt16); // Returns a Uint8Array
+        const mulawBuffer = Buffer.from(mulawUint8.buffer);
+        const payload = mulawBuffer.toString('base64');
 
         const twilioMsgObj = {
           event: 'media',
@@ -249,8 +261,8 @@ wss.on('connection', async (ws, req) => {
             track: 'outbound',
             chunk: String(outboundChunk++),
             timestamp: String(ts),
-            payload
-          }
+            payload,
+          },
         };
         ws.send(JSON.stringify(twilioMsgObj));
       }
@@ -300,15 +312,13 @@ Compliance:
               type: 'server_vad',
               threshold: 0.5,
               prefix_padding_ms: 300,
-              silence_duration_ms: 600
-            }
-          }
+              silence_duration_ms: 600,
+            },
+          },
         };
         oai.send(JSON.stringify(sys));
-      }
-
-      else if (msg.event === 'media' && msg.media?.payload) {
-        // Twilio: mulaw 8kHz → OpenAI: PCM16 24kHz
+      } else if (msg.event === 'media' && msg.media?.payload) {
+        // Twilio: μ‑law 8 kHz → OpenAI: PCM16 24 kHz
         const mulawBuffer = Buffer.from(msg.media.payload, 'base64');
         const pcm8k = mulawToPcm(mulawBuffer); // Int16Array
         const pcm8kBuffer = Buffer.from(pcm8k.buffer, pcm8k.byteOffset, pcm8k.byteLength);
@@ -317,7 +327,7 @@ Compliance:
 
         oai.send(JSON.stringify({
           type: 'input_audio_buffer.append',
-          audio: base64Pcm
+          audio: base64Pcm,
         }));
 
         // Throttle commits to avoid overload
@@ -328,9 +338,7 @@ Compliance:
             commitPending = false;
           }, 100);
         }
-      }
-
-      else if (msg.event === 'stop') {
+      } else if (msg.event === 'stop') {
         oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
         oai.send(JSON.stringify({ type: 'response.create', response: { modalities: ['audio', 'text'] } }));
 
@@ -361,6 +369,8 @@ Compliance:
 
   ws.on('close', () => {
     console.log('Twilio stream closed', callSid);
-    try { oai.close(); } catch {}
+    try {
+      oai.close();
+    } catch {}
   });
 });
