@@ -6,16 +6,13 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
-import pkg from 'alawmulaw'; // CommonJS package, expose .mulaw object
+import pkg from 'alawmulaw';
 
-// ---- Extract μ-law codec (encode/decode PCM16 <-> μ-law) --------------------
+// Extract μ-law codec
 const { mulaw } = pkg;
 const { decode: mulawToPcm, encode: pcmToMulaw } = mulaw;
 
-// ---- Minimal PCM16 resampler (linear) to go 24 kHz <-> 8 kHz ----------------
-// NOTE: This keeps us independent of pcm-util to avoid CJS/ESM friction.
-// For telephony (8 kHz) this is adequate; we can upgrade to a higher-quality
-// resampler later (e.g. speex/soxr wasm) without changing call sites.
+// Minimal PCM16 resampler (linear interpolation)
 function resamplePCM16(buffer, fromRate, toRate) {
   if (fromRate === toRate) return buffer;
   const inSamp = new Int16Array(buffer.buffer, buffer.byteOffset, buffer.length / 2);
@@ -33,14 +30,14 @@ function resamplePCM16(buffer, fromRate, toRate) {
   return Buffer.from(out.buffer);
 }
 
-// ---- Express app & body parsing ---------------------------------------------
+// Express app setup
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json({ limit: '2mb' }));
 
 const PORT = process.env.PORT || 8080;
 
-// ---- Startup env validation --------------------------------------------------
+// Startup validation
 (function validateEnv() {
   const required = ['OPENAI_API_KEY', 'PUBLIC_BASE_URL'];
   const missing = required.filter((k) => !process.env[k]);
@@ -59,7 +56,7 @@ const PORT = process.env.PORT || 8080;
   }
 })();
 
-// ---- Simple health probe ----------------------------------------------------
+// Health check
 app.get('/', (_req, res) => {
   res.json({
     ok: true,
@@ -69,7 +66,7 @@ app.get('/', (_req, res) => {
   });
 });
 
-// ---- Utilities --------------------------------------------------------------
+// Utilities
 function twimlStream(connectStreamUrl) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -78,19 +75,21 @@ function twimlStream(connectStreamUrl) {
   </Connect>
 </Response>`;
 }
+
 function twimlSay(text) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>${escapeXml(text)}</Say>
 </Response>`;
 }
+
 function escapeXml(s) {
   return String(s).replace(/[<>&'"]/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c])
   );
 }
 
-// ---- Twilio: inbound call -> start media stream -----------------------------
+// Twilio voice webhook
 app.post('/twilio/voice', (req, res) => {
   const callSid = req.body?.CallSid || uuidv4();
   try {
@@ -98,28 +97,21 @@ app.post('/twilio/voice', (req, res) => {
     if (!base || !/^https?:\/\//i.test(base)) {
       console.error('[VOICE] ❌ Invalid/missing PUBLIC_BASE_URL:', base);
       res.set('Content-Type', 'text/xml').status(200).send(
-        twimlSay(
-          'We are sorry. The service configuration is incomplete. Please try again later.'
-        )
+        twimlSay('We are sorry. The service configuration is incomplete. Please try again later.')
       );
       return;
     }
     const wsBase = base.replace(/\/+$/, '');
-    const wsUrl = `${wsBase.replace(/^http/, 'ws')}/twilio-stream?callSid=${encodeURIComponent(
-      callSid
-    )}`;
+    const wsUrl = `${wsBase.replace(/^http/, 'ws')}/twilio-stream?callSid=${encodeURIComponent(callSid)}`;
     console.log('[VOICE] ▶︎ Incoming call', { callSid, wsUrl });
     res.set('Content-Type', 'text/xml').status(200).send(twimlStream(wsUrl));
   } catch (e) {
     console.error('[VOICE] ❌ Exception preparing TwiML:', e);
-    res
-      .status(200)
-      .set('Content-Type', 'text/xml')
-      .send(twimlSay('We are sorry, an application error has occurred.'));
+    res.status(200).set('Content-Type', 'text/xml').send(twimlSay('We are sorry, an application error has occurred.'));
   }
 });
 
-// ---- Notifications (Twilio SMS + email) -------------------------------------
+// Twilio SMS
 const twilioClient =
   process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
     ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -138,6 +130,7 @@ async function sendSMS(to, body) {
   return { ok: true, sid: msg.sid };
 }
 
+// Email
 const mailer =
   process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
     ? nodemailer.createTransport({
@@ -162,7 +155,7 @@ async function sendEmail({ subject, html }) {
   return { ok: true, id: info.messageId };
 }
 
-// ---- Start HTTP server & WS upgrade ----------------------------------------
+// Start server
 const server = app.listen(PORT, () => {
   console.log(`[HTTP] ✅ Listening on :${PORT}`);
 });
@@ -180,7 +173,7 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
-// ---- OpenAI Realtime socket factory ----------------------------------------
+// OpenAI Realtime socket
 async function createOpenAIRealtimeSocket() {
   const { default: WS } = await import('ws');
   const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
@@ -195,14 +188,12 @@ async function createOpenAIRealtimeSocket() {
 
   ws.on('open', () => console.log('[OAI] ✅ Realtime connected'));
   ws.on('error', (err) => console.error('[OAI] ❌ WS error:', err?.message || err));
-  ws.on('close', (code, reason) =>
-    console.log('[OAI] ✖︎ Realtime closed', code, String(reason || ''))
-  );
+  ws.on('close', (code, reason) => console.log('[OAI] ✖︎ Realtime closed', code, String(reason || '')));
 
   return ws;
 }
 
-// ---- Twilio media bridge ----------------------------------------------------
+// Twilio WebSocket bridge
 wss.on('connection', async (ws, req) => {
   const u = new URL(req.url, 'http://localhost');
   const callSid = u.searchParams.get('callSid') || uuidv4();
@@ -226,7 +217,7 @@ wss.on('connection', async (ws, req) => {
     return;
   }
 
-  // OpenAI → Twilio (speak back)
+  // OpenAI to Twilio
   oexion(oai, 'message', (message) => {
     try {
       const evt = JSON.parse(message.toString());
@@ -237,7 +228,7 @@ wss.on('connection', async (ws, req) => {
         const pcm24 = Buffer.from(evt.delta, 'base64');
         const pcm8 = resamplePCM16(pcm24, 24000, 8000);
         const pcm8Int16 = new Int16Array(pcm8.buffer, pcm8.byteOffset, pcm8.length / 2);
-        const mu = pcmToMulaw(pcm8Int16); // Uint8Array
+        const mu = pcmToMulaw(pcm8Int16);
         const muBuf = Buffer.from(mu.buffer);
         const payload = muBuf.toString('base64');
 
@@ -259,6 +250,7 @@ wss.on('connection', async (ws, req) => {
     }
   });
 
+  // Twilio to OpenAI
   oexon(ws, 'message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
@@ -270,10 +262,7 @@ wss.on('connection', async (ws, req) => {
         const sessionUpdate = {
           type: 'session.update',
           session: {
-            instructions: `
-You are a professional, helpful mortgage assistant for Brendan's team in Buffalo, NY.
-Speak clearly, concise, friendly, and confident. Offer to send the loan application link when appropriate.
-Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.`,
+            instructions: `You are a professional, helpful mortgage assistant for Brendan's team in Buffalo, NY. Speak clearly, concise, friendly, and confident. Offer to send the loan application link when appropriate. Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.`,
             modalities: ['text', 'audio'],
             voice: process.env.OPENAI_VOICE || 'alloy',
             input_audio_format: 'pcm16',
@@ -284,9 +273,8 @@ Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.
         oai.send(JSON.stringify(sessionUpdate));
         console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
       } else if (msg.event === 'media' && msg.media?.payload) {
-        // Twilio: μ-law 8 kHz -> PCM16 24 kHz
         const muBuf = Buffer.from(msg.media.payload, 'base64');
-        const pcm8 = mulawToPcm(muBuf); // Int16Array (8 kHz)
+        const pcm8 = mulawToPcm(muBuf);
         const pcm8Buf = Buffer.from(pcm8.buffer, pcm8.byteOffset, pcm8.byteLength);
         const pcm24 = resamplePCM16(pcm8Buf, 8000, 24000);
         const audio = pcm24.toString('base64');
@@ -330,7 +318,7 @@ Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.
   });
 });
 
-// ---- TLDR helper ------------------------------------------------------------
+// TLDR summarizer
 async function summarizeTLDR(transcript) {
   try {
     const key = process.env.OPENAI_API_KEY;
@@ -355,10 +343,13 @@ async function summarizeTLDR(transcript) {
   }
 }
 
-// ---- small helpers for robust event handling with ws ------------------------
+// Event handler helpers
 function oexion(emitter, event, handler) {
   emitter.on(event, (msg, ...rest) => {
     try { handler(msg, ...rest); } catch (e) { console.error(`[WS] handler error (${event})`, e); }
   });
 }
-function oexon(emitter, event, handler) { oexion(emitter, event, handler); }
+
+function oexon(emitter, event, handler) { 
+  oexion(emitter, event, handler); 
+}
