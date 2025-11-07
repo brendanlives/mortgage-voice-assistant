@@ -122,12 +122,17 @@ async function sendSMS(to, body) {
     console.warn('[SMS] ⚠️ SMS not configured; skipping.', { to, preview: body?.slice(0, 80) });
     return { ok: false, disabled: true };
   }
-  const msg = await twilioClient.messages.create({
-    from: process.env.TWILIO_MESSAGING_NUMBER,
-    to,
-    body,
-  });
-  return { ok: true, sid: msg.sid };
+  try {
+    const msg = await twilioClient.messages.create({
+      from: process.env.TWILIO_MESSAGING_NUMBER,
+      to,
+      body,
+    });
+    return { ok: true, sid: msg.sid };
+  } catch (e) {
+    console.error('[SMS] Error:', e?.message);
+    return { ok: false, error: e?.message };
+  }
 }
 
 // Email
@@ -142,17 +147,22 @@ const mailer =
     : null;
 
 async function sendEmail({ subject, html }) {
-  if (!mailer || !process.env.SMTP_USER) {
+  if (!mailer || !process.env.SMTP_USER || !process.env.NOTIFY_EMAIL) {
     console.warn('[MAIL] ⚠️ Mailer not configured; skipping.', { subject });
     return { ok: false, disabled: true };
   }
-  const info = await mailer.sendMail({
-    from: 'assistant@voicebot.local',
-    to: process.env.NOTIFY_EMAIL,
-    subject,
-    html,
-  });
-  return { ok: true, id: info.messageId };
+  try {
+    const info = await mailer.sendMail({
+      from: process.env.SMTP_USER,
+      to: process.env.NOTIFY_EMAIL,
+      subject,
+      html,
+    });
+    return { ok: true, id: info.messageId };
+  } catch (e) {
+    console.error('[MAIL] Error:', e?.message);
+    return { ok: false, error: e?.message };
+  }
 }
 
 // Start server
@@ -186,11 +196,17 @@ async function createOpenAIRealtimeSocket() {
     perMessageDeflate: false,
   });
 
-  ws.on('open', () => console.log('[OAI] ✅ Realtime connected'));
-  ws.on('error', (err) => console.error('[OAI] ❌ WS error:', err?.message || err));
-  ws.on('close', (code, reason) => console.log('[OAI] ✖︎ Realtime closed', code, String(reason || '')));
-
-  return ws;
+  // Return a promise that resolves when connection is open
+  return new Promise((resolve, reject) => {
+    ws.on('open', () => {
+      console.log('[OAI] ✅ Realtime connected');
+      resolve(ws);
+    });
+    ws.on('error', (err) => {
+      console.error('[OAI] ❌ WS error:', err?.message || err);
+      reject(err);
+    });
+  });
 }
 
 // Twilio WebSocket bridge
@@ -207,24 +223,47 @@ wss.on('connection', async (ws, req) => {
   let outboundChunk = 1;
   let streamStartMs = Date.now();
   let commitPending = false;
+  let messageQueue = [];
+  let oaiReady = false;
 
   let oai;
   try {
     oai = await createOpenAIRealtimeSocket();
+    oaiReady = true;
+    
+    // Process any queued messages
+    if (messageQueue.length > 0) {
+      console.log(`[WS] Processing ${messageQueue.length} queued messages`);
+      messageQueue.forEach(msg => {
+        try {
+          oai.send(JSON.stringify(msg));
+        } catch (e) {
+          console.error('[WS] Error sending queued message:', e);
+        }
+      });
+      messageQueue = [];
+    }
   } catch (e) {
     console.error('[WS] ❌ Failed to create OpenAI socket:', e);
     ws.close();
     return;
   }
 
+  oai.on('close', (code, reason) => {
+    console.log('[OAI] ✖︎ Realtime closed', code, String(reason || ''));
+    oaiReady = false;
+  });
+
   // OpenAI to Twilio
-  oexion(oai, 'message', (message) => {
+  oai.on('message', (message) => {
     try {
       const evt = JSON.parse(message.toString());
+      
       if (evt.type === 'response.output_text.delta' && evt?.delta) {
         transcriptParts.push(`[AI] ${evt.delta}`);
       }
-      if (evt.type === 'response.audio.delta' && evt?.delta) {
+      
+      if (evt.type === 'response.audio.delta' && evt?.delta && twilioStreamSid) {
         const pcm24 = Buffer.from(evt.delta, 'base64');
         const pcm8 = resamplePCM16(pcm24, 24000, 8000);
         const pcm8Int16 = new Int16Array(pcm8.buffer, pcm8.byteOffset, pcm8.length / 2);
@@ -251,9 +290,10 @@ wss.on('connection', async (ws, req) => {
   });
 
   // Twilio to OpenAI
-  oexon(ws, 'message', (data) => {
+  ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
+      
       if (msg.event === 'start') {
         twilioStreamSid = msg.start?.streamSid || msg.streamSid || null;
         callerNumber = msg?.start?.from || null;
@@ -264,33 +304,33 @@ wss.on('connection', async (ws, req) => {
           session: {
             instructions: `You are Brendan's AI assistant helping with mortgages and real estate in Buffalo, NY.
 
-IMPORTANT: Always start every call by saying "Hello! I'm Brendan's AI assistant" and then briefly explain what you can help with.
+IMPORTANT GREETING: Start EVERY call by immediately saying: "Hello! I'm Brendan's AI assistant. I can help you with mortgage pre-approvals, refinancing, rate quotes, and answering any mortgage questions you have. What brings you in today?"
 
 CRITICAL RULES:
 - Always speak in English only, never any other language
-- Speak naturally and conversationally, like a real person would
-- Use natural pauses and inflections in your speech
+- Speak naturally and conversationally like a real person
+- Use natural pauses and inflections
 - Be warm, friendly, and professional
-- Listen carefully and respond naturally to what the caller says
+- Listen carefully and respond to what the caller says
 - Ask clarifying questions when needed
-- Never rush through your responses
+- Never rush through responses
 
-YOU CAN HELP WITH:
-- Mortgage pre-approvals and applications for home purchases
+WHAT YOU CAN HELP WITH:
+- Mortgage pre-approvals and applications
 - Refinancing existing mortgages
 - All loan types: Conventional, FHA, VA, USDA
-- Mortgage rate quotes and payment calculations
+- Rate quotes and payment calculations
 - Buffalo-area real estate questions
-- Qualifying buyers and answering mortgage questions
-- Sending the loan application link via text when requested
+- Qualifying buyers
+- Sending loan application links via text
 
 CONVERSATION STYLE:
-- Speak like you're having a natural phone conversation
+- Sound like you're having a natural phone conversation
 - Don't sound robotic or scripted
-- Use conversational phrases like "Sure, I can help with that" or "That's a great question"
+- Use phrases like "Sure, I can help with that" or "That's a great question"
 - Acknowledge what the caller says before responding
-- Be patient and give the caller time to think and respond
-- If you're not sure what they said, politely ask them to repeat it
+- Be patient and give them time to think
+- If unclear, politely ask them to repeat
 
 Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and make callers feel comfortable.`,
             modalities: ['text', 'audio'],
@@ -304,26 +344,29 @@ Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and 
               type: 'server_vad',
               threshold: 0.5,
               prefix_padding_ms: 300,
-              silence_duration_ms: 800
+              silence_duration_ms: 700
             },
             temperature: 0.8,
             max_response_output_tokens: 4096
           },
         };
-        oai.send(JSON.stringify(sessionUpdate));
         
-        // Send initial greeting after session is configured
-        setTimeout(() => {
-          oai.send(JSON.stringify({
-            type: 'response.create',
-            response: {
-              modalities: ['text', 'audio'],
-              instructions: 'Start the conversation by introducing yourself as instructed in the system prompt.'
+        if (oaiReady) {
+          oai.send(JSON.stringify(sessionUpdate));
+          // Trigger initial greeting
+          setTimeout(() => {
+            if (oaiReady) {
+              oai.send(JSON.stringify({
+                type: 'response.create',
+              }));
             }
-          }));
-        }, 500);
+          }, 300);
+        } else {
+          messageQueue.push(sessionUpdate);
+        }
         
         console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
+        
       } else if (msg.event === 'media' && msg.media?.payload) {
         const muBuf = Buffer.from(msg.media.payload, 'base64');
         const pcm8 = mulawToPcm(muBuf);
@@ -331,18 +374,29 @@ Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and 
         const pcm24 = resamplePCM16(pcm8Buf, 8000, 24000);
         const audio = pcm24.toString('base64');
 
-        oai.send(JSON.stringify({ type: 'input_audio_buffer.append', audio }));
-        if (!commitPending) {
-          commitPending = true;
-          setTimeout(() => {
-            oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-            commitPending = false;
-          }, 100);
+        const audioMsg = { type: 'input_audio_buffer.append', audio };
+        
+        if (oaiReady) {
+          oai.send(JSON.stringify(audioMsg));
+          if (!commitPending) {
+            commitPending = true;
+            setTimeout(() => {
+              if (oaiReady) {
+                oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+              }
+              commitPending = false;
+            }, 100);
+          }
+        } else {
+          messageQueue.push(audioMsg);
         }
+        
       } else if (msg.event === 'stop') {
-        oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-        oai.send(JSON.stringify({ type: 'response.create', response: { modalities: ['audio', 'text'] } }));
+        if (oaiReady) {
+          oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+        }
         console.log('[WS] ◀︎ Twilio stop', { callSid });
+        
         setTimeout(async () => {
           try {
             const tldr = await summarizeTLDR(transcriptParts.join('\n'));
@@ -355,16 +409,16 @@ Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and 
               html: `<h2>Call Summary (Auto TLDR)</h2><pre>${tldr}</pre><hr/><pre>${transcriptParts.join('<br/>')}</pre>`,
             });
           } catch (err) {
-            console.error('[WS] ❗ follow-up error:', err);
+            console.error('[WS] ❗ follow-up error:', err?.message);
           }
         }, 1200);
       }
     } catch (err) {
-      console.error('[WS] ❌ handle Twilio message error:', err, { raw: data?.toString?.() });
+      console.error('[WS] ❌ handle Twilio message error:', err?.message);
     }
   });
 
-  oexon(ws, 'close', () => {
+  ws.on('close', () => {
     console.log('[WS] ✖︎ Twilio stream closed', { callSid });
     try { oai?.close(); } catch {}
   });
@@ -374,7 +428,7 @@ Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and 
 async function summarizeTLDR(transcript) {
   try {
     const key = process.env.OPENAI_API_KEY;
-    if (!key) return 'No summary (no OPENAI_API_KEY).';
+    if (!key || !transcript) return 'No summary available.';
     const r = await axios.post(
       'https://api.openai.com/v1/chat/completions',
       {
@@ -393,15 +447,4 @@ async function summarizeTLDR(transcript) {
     console.error('[TLDR] error:', e?.message || e);
     return '—';
   }
-}
-
-// Event handler helpers
-function oexion(emitter, event, handler) {
-  emitter.on(event, (msg, ...rest) => {
-    try { handler(msg, ...rest); } catch (e) { console.error(`[WS] handler error (${event})`, e); }
-  });
-}
-
-function oexon(emitter, event, handler) { 
-  oexion(emitter, event, handler); 
 }
