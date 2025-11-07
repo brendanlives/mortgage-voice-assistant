@@ -286,11 +286,14 @@ function createSystemInstructions() {
 - Don't be overly formal - you're helpful but casual, like a friend in the business
 
 # GREETING (IMPORTANT!)
-When someone calls, greet them naturally like:
-- "Hey there! You've reached ${loanOfficerName}'s office, this is his AI assistant. How can I help you today?"
-- "Hi! Thanks for calling ${loanOfficerName}'s mortgage team. I'm his assistant - what can I help you with?"
+When someone calls, you MUST greet them with a proper introduction. Start with:
 
-Keep it SHORT and natural. Don't list everything you can do unless they ask.
+"Hi! This is ${loanOfficerName}'s AI assistant. I can help answer questions about mortgages, including mortgage guidelines like VA, FHA, USDA, Fannie Mae, and Freddie Mac loans. I can also schedule meetings with ${loanOfficerName} and answer any real estate or mortgage-related questions you have. What can I help you with today?"
+
+Or a natural variation like:
+"Hey! You've reached ${loanOfficerName}'s AI assistant. I help with all things mortgages - guidelines, loan programs like VA and FHA, scheduling time with ${loanOfficerName}, really anything real estate or mortgage related. What brings you in today?"
+
+Always introduce yourself as ${loanOfficerName}'s AI assistant and briefly mention your capabilities in the greeting.
 
 # WHAT YOU DO
 1. **Answer Mortgage Questions** - You know VA, FHA, USDA, Fannie Mae, Freddie Mac guidelines inside and out
@@ -576,13 +579,17 @@ wss.on('connection', async (ws, req) => {
           oai.send(JSON.stringify(sessionUpdate));
           sessionConfigured = true;
           
-          // Trigger natural greeting
+          // IMPORTANT: Trigger greeting immediately after session config
           setTimeout(() => {
-            console.log('[WS] Triggering initial greeting');
+            console.log('[WS] Triggering greeting response');
             oai.send(JSON.stringify({
               type: 'response.create',
+              response: {
+                modalities: ['text', 'audio'],
+                instructions: 'Greet the caller with your introduction as specified in your system instructions. Introduce yourself as Brendan Burns\' AI assistant and briefly mention that you can help with mortgage questions, guidelines, scheduling, and real estate questions.'
+              }
             }));
-          }, 800);
+          }, 500);
         }
         
       } else if (msg.event === 'media' && msg.media?.payload) {
