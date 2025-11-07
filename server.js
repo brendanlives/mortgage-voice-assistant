@@ -253,7 +253,12 @@ wss.on('connection', async (ws, req) => {
         transcriptParts.push(`[AI] ${evt.delta}`);
       }
       
-      if (evt.type === 'response.audio.delta' && evt?.delta && twilioStreamSid) {
+      if (evt.type === 'response.audio.delta' && evt?.delta) {
+        if (!twilioStreamSid) {
+          console.error('[OAI] ❌ Cannot send audio - twilioStreamSid is null!');
+          return;
+        }
+        
         const pcm24 = Buffer.from(evt.delta, 'base64');
         const pcm8 = resamplePCM16(pcm24, 24000, 8000);
         const pcm8Int16 = new Int16Array(pcm8.buffer, pcm8.byteOffset, pcm8.length / 2);
@@ -272,6 +277,8 @@ wss.on('connection', async (ws, req) => {
             payload,
           },
         };
+        
+        console.log('[OAI->Twilio] Sending audio chunk', outboundChunk - 1);
         ws.send(JSON.stringify(media));
       }
       
@@ -327,7 +334,7 @@ Always speak in English only. Be natural, warm, and conversational.`,
           oai.send(JSON.stringify({
             type: 'response.create',
           }));
-        }, 800);
+        }, 1000);
         
       } else if (msg.event === 'media' && msg.media?.payload) {
         // Only process actual audio, not silence
