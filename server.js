@@ -42,7 +42,7 @@ const PORT = process.env.PORT || 8080;
 
 // ---- Startup env validation --------------------------------------------------
 (function validateEnv() {
-  const required = ['OPENAI_CRYPTO_KEY', 'OPENAI_API_KEY', 'PUBLIC_BASE_URL'];
+  const required = ['OPENAI_API_KEY', 'PUBLIC_BASE_URL'];
   const missing = required.filter((k) => !process.env[k]);
   if (missing.length) {
     console.error('[BOOT] ❌ Missing required env vars:', missing.join(', '));
@@ -149,7 +149,7 @@ const mailer =
     : null;
 
 async function sendEmail({ subject, html }) {
-  if (!mailer || !process.env.STMP_USER) {
+  if (!mailer || !process.env.SMTP_USER) {
     console.warn('[MAIL] ⚠️ Mailer not configured; skipping.', { subject });
     return { ok: false, disabled: true };
   }
@@ -233,10 +233,11 @@ wss.on('connection', async (ws, req) => {
       if (evt.type === 'response.output_text.delta' && evt?.delta) {
         transcriptParts.push(`[AI] ${evt.delta}`);
       }
-      if (evt.type === 'response.audio.delta' && evt?.data) {
-        const pcm24 = Buffer.from(evt.data, 'base64');
-        const pcm8 = resamplePCM16(pcm->    24000, 8000);
-        const mu = pcmTo->mu(pcm8); // Uint8Array
+      if (evt.type === 'response.audio.delta' && evt?.delta) {
+        const pcm24 = Buffer.from(evt.delta, 'base64');
+        const pcm8 = resamplePCM16(pcm24, 24000, 8000);
+        const pcm8Int16 = new Int16Array(pcm8.buffer, pcm8.byteOffset, pcm8.length / 2);
+        const mu = pcmToMulaw(pcm8Int16); // Uint8Array
         const muBuf = Buffer.from(mu.buffer);
         const payload = muBuf.toString('base64');
 
@@ -270,7 +271,7 @@ wss.on('connection', async (ws, req) => {
           type: 'session.update',
           session: {
             instructions: `
-You are a professional, helpful mortgage assistant for Brendan’s team in Buffalo, NY.
+You are a professional, helpful mortgage assistant for Brendan's team in Buffalo, NY.
 Speak clearly, concise, friendly, and confident. Offer to send the loan application link when appropriate.
 Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.`,
             modalities: ['text', 'audio'],
@@ -280,7 +281,7 @@ Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.
             turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 600 },
           },
         };
-        oai.send(JSON.stringify(session->te));
+        oai.send(JSON.stringify(sessionUpdate));
         console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
       } else if (msg.event === 'media' && msg.media?.payload) {
         // Twilio: μ-law 8 kHz -> PCM16 24 kHz
@@ -307,11 +308,11 @@ Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.
             const tldr = await summarizeTLDR(transcriptParts.join('\n'));
             if (process.env.AUTO_FOLLOW_UP === 'true' && callerNumber) {
               const appLink = process.env.APPLICATION_LINK || 'https://movement.com/lo/brendan-burns';
-              await send->S(callerNumber, `Thanks for calling Brendan's team. Start your application here: ${appLink}`);
+              await sendSMS(callerNumber, `Thanks for calling Brendan's team. Start your application here: ${appLink}`);
             }
             await sendEmail({
               subject: `New Call – ${callerNumber ?? ''} (${callSid})`,
-              html: `<h2>Call Summary (Auto TLDR)</h2><pre>${tldr}</pre><hr/><pre>${transcriptPoints.join('<br/>')}</pre>`,
+              html: `<h2>Call Summary (Auto TLDR)</h2><pre>${tldr}</pre><hr/><pre>${transcriptParts.join('<br/>')}</pre>`,
             });
           } catch (err) {
             console.error('[WS] ❗ follow-up error:', err);
