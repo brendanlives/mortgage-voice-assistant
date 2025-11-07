@@ -7,12 +7,37 @@ import axios from 'axios';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
 import pkg from 'alawmulaw';
-import pcmUtil from 'pcm-util'; // CommonJS module
 
 // Extract APIs from the imported CommonJS modules
 const { mulaw } = pkg;
-const { resample } = pcmUtil;
 const { decode: mulawToPcm, encode: pcmToMulaw } = mulaw;
+
+/**
+ * Resample a PCM16 buffer from one sample rate to another using linear interpolation.
+ * @param {Buffer} buffer - A Buffer containing 16-bit PCM audio data.
+ * @param {number} fromRate - The original sample rate (e.g. 24000).
+ * @param {number} toRate - The target sample rate (e.g. 8000).
+ * @returns {Buffer} - A Buffer containing the resampled audio.
+ */
+function resample(buffer, fromRate, toRate) {
+  if (fromRate === toRate) {
+    return Buffer.from(buffer);
+  }
+  const input = new Int16Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 2);
+  const ratio = fromRate / toRate;
+  const newLength = Math.floor(input.length / ratio);
+  const output = new Int16Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    const srcIndex = i * ratio;
+    const index0 = Math.floor(srcIndex);
+    const index1 = Math.min(index0 + 1, input.length - 1);
+    const weight = srcIndex - index0;
+    const sample = input[index0] * (1 - weight) + input[index1] * weight;
+    // Clamp the value to valid 16-bit range
+    output[i] = Math.max(-32768, Math.min(32767, sample));
+  }
+  return Buffer.from(output.buffer);
+}
 
 const app = express();
 app.use(bodyParser.json({ limit: '2mb' }));
@@ -114,7 +139,10 @@ async function summarizeTLDR(transcript) {
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: 'You write crisp 3–6 bullet TLDRs for phone call transcripts.' },
-          { role: 'user', content: `Summarize this call for a loan officer. Include borrower basics and next steps:\n\n${transcript}` },
+          {
+            role: 'user',
+            content: `Summarize this call for a loan officer. Include borrower basics and next steps:\n\n${transcript}`,
+          },
         ],
         temperature: 0.2,
         max_tokens: 240,
@@ -241,11 +269,11 @@ wss.on('connection', async (ws, req) => {
         const now = Date.now();
         const ts = streamStartTime ? Math.floor(now - streamStartTime) : 0;
 
-        // OpenAI: PCM16 24 kHz → Twilio: μ‑law 8 kHz
+        // OpenAI: PCM16 24 kHz → Twilio: μ-law 8 kHz
         const pcm24kBuffer = Buffer.from(evt.delta, 'base64');
-        const pcm8kBuffer = resample(pcm24kBuffer, 24000, 8000, { method: 'sinc' });
+        const pcm8kBuffer = resample(pcm24kBuffer, 24000, 8000);
 
-        // Convert the 8 kHz PCM buffer to an Int16Array for encoding
+        // Convert the 8 kHz PCM buffer to an Int16Array for encoding
         const pcm8kInt16 = new Int16Array(
           pcm8kBuffer.buffer,
           pcm8kBuffer.byteOffset,
@@ -320,11 +348,11 @@ Compliance:
         };
         oai.send(JSON.stringify(sys));
       } else if (msg.event === 'media' && msg.media?.payload) {
-        // Twilio: μ‑law 8 kHz → OpenAI: PCM16 24 kHz
+        // Twilio: μ-law 8 kHz → OpenAI: PCM16 24 kHz
         const mulawBuffer = Buffer.from(msg.media.payload, 'base64');
         const pcm8k = mulawToPcm(mulawBuffer); // Int16Array
         const pcm8kBuffer = Buffer.from(pcm8k.buffer, pcm8k.byteOffset, pcm8k.byteLength);
-        const pcm24kBuffer = resample(pcm8kBuffer, 8000, 24000, { method: 'sinc' });
+        const pcm24kBuffer = resample(pcm8kBuffer, 8000, 24000);
         const base64Pcm = pcm24kBuffer.toString('base64');
 
         oai.send(
