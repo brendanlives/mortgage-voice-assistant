@@ -533,50 +533,7 @@ wss.on('connection', async (ws, req) => {
   let sessionConfigured = false;
   let greetingSent = false;
 
-  // Connect to OpenAI FIRST, before setting up Twilio handlers
-  console.log('[WS] Connecting to OpenAI...');
-  try {
-    oai = await createOpenAIRealtimeSocket();
-    oaiReady = true;
-    console.log('[WS] ✅ OpenAI connected for', callSid);
-    
-    // Configure session immediately
-    console.log('[WS] 🔧 Configuring OpenAI session...');
-    const sessionUpdate = {
-      type: 'session.update',
-      session: {
-        instructions: createSystemInstructions(),
-        modalities: ['text', 'audio'],
-        voice: 'shimmer',
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        input_audio_transcription: {
-          model: 'whisper-1'
-        },
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 500
-        },
-        tools: ASSISTANT_TOOLS,
-        tool_choice: 'auto',
-        temperature: 0.9,
-        max_response_output_tokens: 4096
-      },
-    };
-    
-    oai.send(JSON.stringify(sessionUpdate));
-    sessionConfigured = true;
-    console.log('[WS] ✅ Session configured');
-    
-  } catch (e) {
-    console.error('[WS] ❌ Failed to create OpenAI socket:', e);
-    ws.close();
-    return;
-  }
-
-  // Register Twilio message handler
+  // Register Twilio message handler FIRST
   ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
@@ -588,9 +545,9 @@ wss.on('connection', async (ws, req) => {
         
         console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
         
-        // Trigger greeting NOW that we have the stream
-        if (!greetingSent && oaiReady && sessionConfigured) {
-          console.log('[WS] 🎤 Triggering greeting...');
+        // Trigger greeting NOW that we have BOTH OpenAI ready AND the stream
+        if (!greetingSent && oaiReady && sessionConfigured && twilioStreamSid) {
+          console.log('[WS] 🎤 Triggering greeting (both ready)...');
           setTimeout(() => {
             oai.send(JSON.stringify({
               type: 'response.create',
@@ -660,6 +617,64 @@ wss.on('connection', async (ws, req) => {
     console.log('[WS] ✖︎ Twilio stream closed', { callSid });
     try { oai?.close(); } catch {}
   });
+
+  // Connect to OpenAI and set up handlers
+  console.log('[WS] Connecting to OpenAI...');
+  try {
+    oai = await createOpenAIRealtimeSocket();
+    oaiReady = true;
+    console.log('[WS] ✅ OpenAI connected for', callSid);
+    
+    // Configure session immediately
+    console.log('[WS] 🔧 Configuring OpenAI session...');
+    const sessionUpdate = {
+      type: 'session.update',
+      session: {
+        instructions: createSystemInstructions(),
+        modalities: ['text', 'audio'],
+        voice: 'shimmer',
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: {
+          model: 'whisper-1'
+        },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 500
+        },
+        tools: ASSISTANT_TOOLS,
+        tool_choice: 'auto',
+        temperature: 0.9,
+        max_response_output_tokens: 4096
+      },
+    };
+    
+    oai.send(JSON.stringify(sessionUpdate));
+    sessionConfigured = true;
+    console.log('[WS] ✅ Session configured');
+    
+    // If Twilio already sent 'start' and we have the stream, trigger greeting now
+    if (twilioStreamSid && !greetingSent) {
+      console.log('[WS] 🎤 Late greeting trigger (Twilio was ready first)...');
+      setTimeout(() => {
+        oai.send(JSON.stringify({
+          type: 'response.create',
+          response: {
+            modalities: ['text', 'audio'],
+            instructions: 'Immediately greet the caller. Say: "Hi! This is Brendan Burns\' AI assistant. I can help answer questions about mortgages, including mortgage guidelines like VA, FHA, USDA, Fannie Mae, and Freddie Mac loans. I can also schedule meetings with Brendan and answer any real estate or mortgage-related questions you have. What can I help you with today?"'
+          }
+        }));
+        greetingSent = true;
+      }, 300);
+    }
+    
+  } catch (e) {
+    console.error('[WS] ❌ Failed to create OpenAI socket:', e);
+    ws.close();
+    return;
+  }
 
   // Set up OpenAI event handlers
   oai.on('close', (code, reason) => {
