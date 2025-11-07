@@ -16,7 +16,7 @@
     "ws": "^8.18.0",
     "uuid": "^9.0.1",
     "nodemailer": "^6.9.13",
-    "mulaw-decoder": "^1.0.0",
-    "pcm-util": "^1.0.0"
+      "alawmulaw": "^6.0.0",
+ "pcm-util": "^1.0.0"
   }
 }
