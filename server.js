@@ -230,19 +230,7 @@ wss.on('connection', async (ws, req) => {
   try {
     oai = await createOpenAIRealtimeSocket();
     oaiReady = true;
-    
-    // Process any queued messages
-    if (messageQueue.length > 0) {
-      console.log(`[WS] Processing ${messageQueue.length} queued messages`);
-      messageQueue.forEach(msg => {
-        try {
-          oai.send(JSON.stringify(msg));
-        } catch (e) {
-          console.error('[WS] Error sending queued message:', e);
-        }
-      });
-      messageQueue = [];
-    }
+    console.log('[WS] OpenAI socket ready for', callSid);
   } catch (e) {
     console.error('[WS] ❌ Failed to create OpenAI socket:', e);
     ws.close();
@@ -254,28 +242,12 @@ wss.on('connection', async (ws, req) => {
     oaiReady = false;
   });
 
-  // OpenAI to Twilio
-  let sessionConfigured = false;
-  let greetingSent = false;
-  
+  // OpenAI to Twilio  
   oai.on('message', (message) => {
     try {
       const evt = JSON.parse(message.toString());
       
       console.log('[OAI] Event:', evt.type); // Debug logging
-      
-      // When session is created/updated, trigger the greeting
-      if ((evt.type === 'session.updated' || evt.type === 'session.created') && !greetingSent && twilioStreamSid) {
-        greetingSent = true;
-        sessionConfigured = true;
-        console.log('[OAI] ✅ Session ready, triggering greeting');
-        setTimeout(() => {
-          console.log('[OAI] Sending greeting request');
-          oai.send(JSON.stringify({
-            type: 'response.create',
-          }));
-        }, 500);
-      }
       
       if (evt.type === 'response.output_text.delta' && evt?.delta) {
         transcriptParts.push(`[AI] ${evt.delta}`);
@@ -322,95 +294,58 @@ wss.on('connection', async (ws, req) => {
         streamStartMs = Date.now();
         
         console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
+        console.log('[WS] Configuring OpenAI session...');
 
         const sessionUpdate = {
           type: 'session.update',
           session: {
-            instructions: `You are Brendan's AI assistant helping with mortgages and real estate in Buffalo, NY.
+            instructions: `You are Brendan's AI assistant for mortgages in Buffalo, NY.
 
-IMPORTANT GREETING: Start EVERY call by immediately saying: "Hello! I'm Brendan's AI assistant. I can help you with mortgage pre-approvals, refinancing, rate quotes, and answering any mortgage questions you have. What brings you in today?"
+FIRST MESSAGE: Immediately greet the caller by saying "Hello! I'm Brendan's AI assistant. I help with mortgage pre-approvals, refinancing, and answering mortgage questions. How can I help you today?"
 
-CRITICAL RULES:
-- Always speak in English only, never any other language
-- Speak naturally and conversationally like a real person
-- Use natural pauses and inflections
-- Be warm, friendly, and professional
-- Listen carefully and respond to what the caller says
-- Ask clarifying questions when needed
-- Never rush through responses
-
-WHAT YOU CAN HELP WITH:
-- Mortgage pre-approvals and applications
-- Refinancing existing mortgages
-- All loan types: Conventional, FHA, VA, USDA
-- Rate quotes and payment calculations
-- Buffalo-area real estate questions
-- Qualifying buyers
-- Sending loan application links via text
-
-CONVERSATION STYLE:
-- Sound like you're having a natural phone conversation
-- Don't sound robotic or scripted
-- Use phrases like "Sure, I can help with that" or "That's a great question"
-- Acknowledge what the caller says before responding
-- Be patient and give them time to think
-- If unclear, politely ask them to repeat
-
-Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and make callers feel comfortable.`,
+Always speak in English only. Be natural, warm, and conversational.`,
             modalities: ['text', 'audio'],
             voice: 'shimmer',
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
-            input_audio_transcription: {
-              model: 'whisper-1'
-            },
             turn_detection: {
               type: 'server_vad',
               threshold: 0.5,
               prefix_padding_ms: 300,
               silence_duration_ms: 700
             },
-            temperature: 0.8,
-            max_response_output_tokens: 4096
+            temperature: 0.8
           },
         };
         
-        if (oaiReady) {
-          console.log('[WS] Sending session.update to OpenAI');
-          oai.send(JSON.stringify(sessionUpdate));
-        } else {
-          console.log('[WS] Queueing session.update (OpenAI not ready)');
-          messageQueue.push(sessionUpdate);
-        }
+        console.log('[WS] Sending session.update to OpenAI');
+        oai.send(JSON.stringify(sessionUpdate));
+        
+        // Give OpenAI a moment, then trigger greeting
+        setTimeout(() => {
+          console.log('[WS] Triggering initial greeting');
+          oai.send(JSON.stringify({
+            type: 'response.create',
+          }));
+        }, 800);
         
       } else if (msg.event === 'media' && msg.media?.payload) {
+        // Only process actual audio, not silence
         const muBuf = Buffer.from(msg.media.payload, 'base64');
-        const pcm8 = mulawToPcm(muBuf);
-        const pcm8Buf = Buffer.from(pcm8.buffer, pcm8.byteOffset, pcm8.byteLength);
-        const pcm24 = resamplePCM16(pcm8Buf, 8000, 24000);
-        const audio = pcm24.toString('base64');
-
-        const audioMsg = { type: 'input_audio_buffer.append', audio };
         
-        if (oaiReady) {
-          oai.send(JSON.stringify(audioMsg));
-          if (!commitPending) {
-            commitPending = true;
-            setTimeout(() => {
-              if (oaiReady) {
-                oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-              }
-              commitPending = false;
-            }, 100);
-          }
-        } else {
-          messageQueue.push(audioMsg);
+        // Check if this is actual audio (not all zeros/silence)
+        const hasAudio = Array.from(muBuf).some(byte => byte !== 127 && byte !== 255);
+        
+        if (hasAudio && oaiReady) {
+          const pcm8 = mulawToPcm(muBuf);
+          const pcm8Buf = Buffer.from(pcm8.buffer, pcm8.byteOffset, pcm8.byteLength);
+          const pcm24 = resamplePCM16(pcm8Buf, 8000, 24000);
+          const audio = pcm24.toString('base64');
+
+          oai.send(JSON.stringify({ type: 'input_audio_buffer.append', audio }));
         }
         
       } else if (msg.event === 'stop') {
-        if (oaiReady) {
-          oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-        }
         console.log('[WS] ◀︎ Twilio stop', { callSid });
         
         setTimeout(async () => {
