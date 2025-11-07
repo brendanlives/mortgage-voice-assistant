@@ -249,11 +249,13 @@ wss.on('connection', async (ws, req) => {
         const sessionUpdate = {
           type: 'session.update',
           session: {
-            instructions: `You are Brendan's AI assistant for mortgages in Buffalo, NY.
+            instructions: `You are Brendan Burns' AI assistant for mortgages in Buffalo, NY.
 
-FIRST MESSAGE: Immediately greet the caller by saying "Hello! I'm Brendan's AI assistant. I help with mortgage pre-approvals, refinancing, and answering mortgage questions. How can I help you today?"
+CRITICAL: Your first response should ALWAYS be: "Hello! I'm Brendan Burns' AI assistant. I help with mortgage pre-approvals, refinancing, rate quotes, and answering any mortgage questions. How can I help you today?"
 
-Always speak in English only. Be natural, warm, and conversational.`,
+You work for Brendan Burns, a mortgage loan officer. Never say you don't know who Brendan is. If someone asks for Brendan, tell them you're his AI assistant and can help them or take a message.
+
+Always speak in English only. Be natural, warm, conversational, and knowledgeable about mortgages.`,
             modalities: ['text', 'audio'],
             voice: 'shimmer',
             input_audio_format: 'pcm16',
@@ -329,6 +331,40 @@ Always speak in English only. Be natural, warm, and conversational.`,
     oai = await createOpenAIRealtimeSocket();
     oaiReady = true;
     console.log('[WS] OpenAI socket ready for', callSid);
+    
+    // Configure session immediately as fallback (in case Twilio's start event was missed)
+    const fallbackConfig = {
+      type: 'session.update',
+      session: {
+        instructions: `You are Brendan Burns' AI assistant for mortgages in Buffalo, NY.
+
+CRITICAL: Your first response should ALWAYS be: "Hello! I'm Brendan Burns' AI assistant. I help with mortgage pre-approvals, refinancing, rate quotes, and answering any mortgage questions. How can I help you today?"
+
+You work for Brendan Burns, a mortgage loan officer. Never say you don't know who Brendan is. If someone asks for Brendan, tell them you're his AI assistant and can help them or take a message.
+
+Always speak in English only. Be natural, warm, conversational, and knowledgeable about mortgages.`,
+        modalities: ['text', 'audio'],
+        voice: 'shimmer',
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 700
+        },
+        temperature: 0.8
+      },
+    };
+    
+    console.log('[WS] Sending fallback session config');
+    oai.send(JSON.stringify(fallbackConfig));
+    
+    // Trigger greeting after brief delay
+    setTimeout(() => {
+      console.log('[WS] Triggering fallback greeting');
+      oai.send(JSON.stringify({ type: 'response.create' }));
+    }, 800);
   } catch (e) {
     console.error('[WS] ❌ Failed to create OpenAI socket:', e);
     ws.close();
