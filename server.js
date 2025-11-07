@@ -262,15 +262,67 @@ wss.on('connection', async (ws, req) => {
         const sessionUpdate = {
           type: 'session.update',
           session: {
-            instructions: `You are a professional, helpful mortgage assistant for Brendan's team in Buffalo, NY. Speak clearly, concise, friendly, and confident. Offer to send the loan application link when appropriate. Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.`,
+            instructions: `You are Brendan's AI assistant helping with mortgages and real estate in Buffalo, NY.
+
+IMPORTANT: Always start every call by saying "Hello! I'm Brendan's AI assistant" and then briefly explain what you can help with.
+
+CRITICAL RULES:
+- Always speak in English only, never any other language
+- Speak naturally and conversationally, like a real person would
+- Use natural pauses and inflections in your speech
+- Be warm, friendly, and professional
+- Listen carefully and respond naturally to what the caller says
+- Ask clarifying questions when needed
+- Never rush through your responses
+
+YOU CAN HELP WITH:
+- Mortgage pre-approvals and applications for home purchases
+- Refinancing existing mortgages
+- All loan types: Conventional, FHA, VA, USDA
+- Mortgage rate quotes and payment calculations
+- Buffalo-area real estate questions
+- Qualifying buyers and answering mortgage questions
+- Sending the loan application link via text when requested
+
+CONVERSATION STYLE:
+- Speak like you're having a natural phone conversation
+- Don't sound robotic or scripted
+- Use conversational phrases like "Sure, I can help with that" or "That's a great question"
+- Acknowledge what the caller says before responding
+- Be patient and give the caller time to think and respond
+- If you're not sure what they said, politely ask them to repeat it
+
+Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and make callers feel comfortable.`,
             modalities: ['text', 'audio'],
-            voice: process.env.OPENAI_VOICE || 'alloy',
+            voice: 'shimmer',
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
-            turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 600 },
+            input_audio_transcription: {
+              model: 'whisper-1'
+            },
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 800
+            },
+            temperature: 0.8,
+            max_response_output_tokens: 4096
           },
         };
         oai.send(JSON.stringify(sessionUpdate));
+        
+        // Send initial greeting after session is configured
+        setTimeout(() => {
+          oai.send(JSON.stringify({
+            type: 'response.create',
+            response: {
+              modalities: ['text', 'audio'],
+              instructions: 'Start the conversation by introducing yourself as instructed in the system prompt.'
+            }
+          }));
+        }, 500);
+        
         console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
       } else if (msg.event === 'media' && msg.media?.payload) {
         const muBuf = Buffer.from(msg.media.payload, 'base64');
