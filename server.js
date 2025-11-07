@@ -531,6 +531,50 @@ wss.on('connection', async (ws, req) => {
   let oaiReady = false;
   let oai = null;
   let sessionConfigured = false;
+  let greetingSent = false;
+
+  // Connect to OpenAI FIRST, before setting up Twilio handlers
+  console.log('[WS] Connecting to OpenAI...');
+  try {
+    oai = await createOpenAIRealtimeSocket();
+    oaiReady = true;
+    console.log('[WS] ✅ OpenAI connected for', callSid);
+    
+    // Configure session immediately
+    console.log('[WS] 🔧 Configuring OpenAI session...');
+    const sessionUpdate = {
+      type: 'session.update',
+      session: {
+        instructions: createSystemInstructions(),
+        modalities: ['text', 'audio'],
+        voice: 'shimmer',
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: {
+          model: 'whisper-1'
+        },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 500
+        },
+        tools: ASSISTANT_TOOLS,
+        tool_choice: 'auto',
+        temperature: 0.9,
+        max_response_output_tokens: 4096
+      },
+    };
+    
+    oai.send(JSON.stringify(sessionUpdate));
+    sessionConfigured = true;
+    console.log('[WS] ✅ Session configured');
+    
+  } catch (e) {
+    console.error('[WS] ❌ Failed to create OpenAI socket:', e);
+    ws.close();
+    return;
+  }
 
   // Register Twilio message handler
   ws.on('message', (data) => {
@@ -544,52 +588,19 @@ wss.on('connection', async (ws, req) => {
         
         console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
         
-        if (!oaiReady) {
-          console.log('[WS] ⚠️  OpenAI not ready yet, waiting...');
-          return;
-        }
-        
-        if (!sessionConfigured) {
-          console.log('[WS] Configuring OpenAI session with enhanced instructions...');
-
-          const sessionUpdate = {
-            type: 'session.update',
-            session: {
-              instructions: createSystemInstructions(),
-              modalities: ['text', 'audio'],
-              voice: 'shimmer',
-              input_audio_format: 'pcm16',
-              output_audio_format: 'pcm16',
-              input_audio_transcription: {
-                model: 'whisper-1'
-              },
-              turn_detection: {
-                type: 'server_vad',
-                threshold: 0.5,
-                prefix_padding_ms: 300,
-                silence_duration_ms: 500
-              },
-              tools: ASSISTANT_TOOLS,
-              tool_choice: 'auto',
-              temperature: 0.9,
-              max_response_output_tokens: 4096
-            },
-          };
-          
-          oai.send(JSON.stringify(sessionUpdate));
-          sessionConfigured = true;
-          
-          // IMPORTANT: Trigger greeting immediately after session config
+        // Trigger greeting NOW that we have the stream
+        if (!greetingSent && oaiReady && sessionConfigured) {
+          console.log('[WS] 🎤 Triggering greeting...');
           setTimeout(() => {
-            console.log('[WS] Triggering greeting response');
             oai.send(JSON.stringify({
               type: 'response.create',
               response: {
                 modalities: ['text', 'audio'],
-                instructions: 'Greet the caller with your introduction as specified in your system instructions. Introduce yourself as Brendan Burns\' AI assistant and briefly mention that you can help with mortgage questions, guidelines, scheduling, and real estate questions.'
+                instructions: 'Immediately greet the caller. Say: "Hi! This is Brendan Burns\' AI assistant. I can help answer questions about mortgages, including mortgage guidelines like VA, FHA, USDA, Fannie Mae, and Freddie Mac loans. I can also schedule meetings with Brendan and answer any real estate or mortgage-related questions you have. What can I help you with today?"'
               }
             }));
-          }, 500);
+            greetingSent = true;
+          }, 300);
         }
         
       } else if (msg.event === 'media' && msg.media?.payload) {
@@ -650,17 +661,7 @@ wss.on('connection', async (ws, req) => {
     try { oai?.close(); } catch {}
   });
 
-  // Connect to OpenAI
-  try {
-    oai = await createOpenAIRealtimeSocket();
-    oaiReady = true;
-    console.log('[WS] OpenAI socket ready for', callSid);
-  } catch (e) {
-    console.error('[WS] ❌ Failed to create OpenAI socket:', e);
-    ws.close();
-    return;
-  }
-
+  // Set up OpenAI event handlers
   oai.on('close', (code, reason) => {
     console.log('[OAI] ✖︎ Realtime closed', code, String(reason || ''));
     oaiReady = false;
