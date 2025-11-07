@@ -6,79 +6,120 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
-import pkg from 'alawmulaw';
+import pkg from 'alawmulaw'; // CommonJS package, expose .mulaw object
 
-// Extract APIs from the imported CommonJS modules
+// ---- Extract μ-law codec (encode/decode PCM16 <-> μ-law) --------------------
 const { mulaw } = pkg;
 const { decode: mulawToPcm, encode: pcmToMulaw } = mulaw;
 
-/**
- * Resample a PCM16 buffer from one sample rate to another using linear interpolation.
- * @param {Buffer} buffer - A Buffer containing 16-bit PCM audio data.
- * @param {number} fromRate - The original sample rate (e.g. 24000).
- * @param {number} toRate - The target sample rate (e.g. 8000).
- * @returns {Buffer} - A Buffer containing the resampled audio.
- */
-function resample(buffer, fromRate, toRate) {
-  if (fromRate === toRate) {
-    return Buffer.from(buffer);
-  }
-  const input = new Int16Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 2);
+// ---- Minimal PCM16 resampler (linear) to go 24 kHz <-> 8 kHz ----------------
+// NOTE: This keeps us independent of pcm-util to avoid CJS/ESM friction.
+// For telephony (8 kHz) this is adequate; we can upgrade to a higher-quality
+// resampler later (e.g. speex/soxr wasm) without changing call sites.
+function resamplePCM16(buffer, fromRate, toRate) {
+  if (fromRate === toRate) return buffer;
+  const inSamp = new Int16Array(buffer.buffer, buffer.byteOffset, buffer.length / 2);
   const ratio = fromRate / toRate;
-  const newLength = Math.floor(input.length / ratio);
-  const output = new Int16Array(newLength);
-  for (let i = 0; i < newLength; i++) {
-    const srcIndex = i * ratio;
-    const index0 = Math.floor(srcIndex);
-    const index1 = Math.min(index0 + 1, input.length - 1);
-    const weight = srcIndex - index0;
-    const sample = input[index0] * (1 - weight) + input[index1] * weight;
-    // Clamp the value to valid 16-bit range
-    output[i] = Math.max(-32768, Math.min(32767, sample));
+  const outCount = Math.max(1, Math.floor(inSamp.length / ratio));
+  const out = new Int16Array(outCount);
+  for (let i = 0; i < outCount; i++) {
+    const pos = i * ratio;
+    const i0 = Math.min(Math.floor(pos), inSamp.length - 1);
+    const i1 = Math.min(i0 + 1, inSamp.length - 1);
+    const frac = pos - i0;
+    const s = (1 - frac) * inSamp[i0] + frac * inSamp[i1];
+    out[i] = Math.max(-32768, Math.min(32767, Math.round(s)));
   }
-  return Buffer.from(output.buffer);
+  return Buffer.from(out.buffer);
 }
 
+// ---- Express app & body parsing ---------------------------------------------
 const app = express();
-app.use(bodyParser.json({ limit: '2mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: '2mb' }));
 
 const PORT = process.env.PORT || 8080;
 
-// --- Utilities ---
-function twimlResponse(connectStreamUrl) {
-  return `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="${connectStreamUrl}"/></Connect></Response>`;
+// ---- Startup env validation --------------------------------------------------
+(function validateEnv() {
+  const required = ['OPENAI_CRYPTO_KEY', 'OPENAI_API_KEY', 'PUBLIC_BASE_URL'];
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.error('[BOOT] ❌ Missing required env vars:', missing.join(', '));
+  } else {
+    console.log('[BOOT] ✅ Required env OK');
+  }
+  const pbu = process.env.PUBLIC_BASE_URL;
+  if (!pbu || !/^https?:\/\//i.test(pbu)) {
+    console.error(
+      `[BOOT] ⚠️  PUBLIC_BASE_URL is not set to a full URL. Current: "${pbu ?? ''}". Example: https://mortgage-voice-assistant.onrender.com`
+    );
+  } else {
+    console.log('[BOOT] PUBLIC_BASE_URL =', pbu);
+  }
+})();
+
+// ---- Simple health probe ----------------------------------------------------
+app.get('/', (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'Mortgage Voice Assistant',
+    time: new Date().toISOString(),
+    publicBaseUrl: process.env.PUBLIC_BASE_URL || null,
+  });
+});
+
+// ---- Utilities --------------------------------------------------------------
+function twimlStream(connectStreamUrl) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="${connectStreamUrl}" />
+  </Connect>
+</Response>`;
+}
+function twimlSay(text) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>${escapeXml(text)}</Say>
+</Response>`;
+}
+function escapeXml(s) {
+  return String(s).replace(/[<>&'"]/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c])
+  );
 }
 
-// --- Voice webhook ---
+// ---- Twilio: inbound call -> start media stream -----------------------------
 app.post('/twilio/voice', (req, res) => {
-  const callSid = req.body.CallSid || uuidv4();
-  const publicBase = process.env.PUBLIC_BASE_URL || `https://example.com`;
-  const wsBase = publicBase.replace(/^http/, 'ws');
-  const wsUrl = `${wsBase.replace(/\/$/, '')}/twilio-stream?callSid=${callSid}`;
-  const twiml = twimlResponse(wsUrl);
-  res.set('Content-Type', 'text/xml');
-  res.send(twiml);
+  const callSid = req.body?.CallSid || uuidv4();
+  try {
+    const base = (process.env.PUBLIC_BASE_URL || '').trim();
+    if (!base || !/^https?:\/\//i.test(base)) {
+      console.error('[VOICE] ❌ Invalid/missing PUBLIC_BASE_URL:', base);
+      res.set('Content-Type', 'text/xml').status(200).send(
+        twimlSay(
+          'We are sorry. The service configuration is incomplete. Please try again later.'
+        )
+      );
+      return;
+    }
+    const wsBase = base.replace(/\/+$/, '');
+    const wsUrl = `${wsBase.replace(/^http/, 'ws')}/twilio-stream?callSid=${encodeURIComponent(
+      callSid
+    )}`;
+    console.log('[VOICE] ▶︎ Incoming call', { callSid, wsUrl });
+    res.set('Content-Type', 'text/xml').status(200).send(twimlStream(wsUrl));
+  } catch (e) {
+    console.error('[VOICE] ❌ Exception preparing TwiML:', e);
+    res
+      .status(200)
+      .set('Content-Type', 'text/xml')
+      .send(twimlSay('We are sorry, an application error has occurred.'));
+  }
 });
 
-// --- Lead capture ---
-app.post('/lead', async (req, res) => {
-  const { name, phone, email, topic } = req.body || {};
-  console.log('Lead received:', { name, phone, email, topic });
-  const calendly = process.env.CALENDLY_LINK;
-  const reply = {
-    ok: true,
-    next: calendly ? `Please pick a time here: ${calendly}` : 'We will contact you to schedule.',
-  };
-  res.json(reply);
-});
-
-// --- Health check ---
-app.get('/', (req, res) => {
-  res.json({ ok: true, service: 'Mortgage Voice Assistant', time: new Date().toISOString() });
-});
-
-// --- Notifications ---
+// ---- Notifications (Twilio SMS + email) -------------------------------------
 const twilioClient =
   process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
     ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -86,133 +127,51 @@ const twilioClient =
 
 async function sendSMS(to, body) {
   if (!twilioClient || !process.env.TWILIO_MESSAGING_NUMBER) {
-    console.log('[SMS disabled]', { to, preview: body?.slice(0, 120) });
+    console.warn('[SMS] ⚠️ SMS not configured; skipping.', { to, preview: body?.slice(0, 80) });
     return { ok: false, disabled: true };
   }
-  try {
-    const msg = await twilioClient.messages.create({
-      from: process.env.TWILIO_MESSAGING_NUMBER,
-      to,
-      body,
-    });
-    return { ok: true, sid: msg.sid };
-  } catch (e) {
-    console.error('SMS error', e?.message);
-    return { ok: false, error: e?.message };
-  }
+  const msg = await twilioClient.messages.create({
+    from: process.env.TWILIO_MESSAGING_NUMBER,
+    to,
+    body,
+  });
+  return { ok: true, sid: msg.sid };
 }
 
-const mailer = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: String(process.env.SMTP_SECURE || 'false') === 'true',
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-});
+const mailer =
+  process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+    ? nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: String(process.env.SMTP_SECURE || 'false') === 'true',
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      })
+    : null;
 
 async function sendEmail({ subject, html }) {
-  if (!process.env.NOTIFY_EMAIL) {
-    console.log('[Email disabled]', subject);
+  if (!mailer || !process.env.STMP_USER) {
+    console.warn('[MAIL] ⚠️ Mailer not configured; skipping.', { subject });
     return { ok: false, disabled: true };
   }
-  try {
-    const info = await mailer.sendMail({
-      from: 'assistant@voicebot.local',
-      to: process.env.NOTIFY_EMAIL,
-      subject,
-      html,
-    });
-    return { ok: true, id: info.messageId };
-  } catch (e) {
-    console.error('Email error', e?.message);
-    return { ok: false, error: e?.message };
-  }
+  const info = await mailer.sendMail({
+    from: 'assistant@voicebot.local',
+    to: process.env.NOTIFY_EMAIL,
+    subject,
+    html,
+  });
+  return { ok: true, id: info.messageId };
 }
 
-// --- TLDR summarizer ---
-async function summarizeTLDR(transcript) {
-  try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return 'No summary (no OPENAI_API_KEY).';
-    const resp = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You write crisp 3–6 bullet TLDRs for phone call transcripts.' },
-          {
-            role: 'user',
-            content: `Summarize this call for a loan officer. Include borrower basics and next steps:\n\n${transcript}`,
-          },
-        ],
-        temperature: 0.2,
-        max_tokens: 240,
-      },
-      { headers: { Authorization: `Bearer ${apiKey}` } }
-    );
-    return resp.data?.choices?.[0]?.message?.content?.trim() || 'Summary unavailable.';
-  } catch (e) {
-    console.error('TLDR error', e?.message);
-    return 'Summary unavailable.';
-  }
-}
-
-// --- Apply Now SMS ---
-app.post('/notify/send-application', async (req, res) => {
-  const { to } = req.body || {};
-  const link = process.env.APPLICATION_LINK || 'https://movement.com/lo/brendan-burns';
-  if (!to) return res.status(400).json({ ok: false, error: 'Missing "to" number' });
-  const text = `Here is the application link to get started: ${link}`;
-  const r = await sendSMS(to, text);
-  res.json({ ok: true, result: r });
-});
-
-// --- Mortgage math ---
-function calcMonthlyPayment({
-  price,
-  downPct = 0.05,
-  rate = 0.07,
-  termYears = 30,
-  tax = 0,
-  insurance = 0,
-  mi = 0,
-}) {
-  const loan = price * (1 - downPct);
-  const n = termYears * 12;
-  const r = rate / 12;
-  const pAndI = r === 0 ? loan / n : (loan * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-  return Math.round((pAndI + tax / 12 + insurance / 12 + mi) * 100) / 100;
-}
-
-const buffaloCheat = {
-  taxes_per_1000: 29.0,
-  typical_attorney_fee: 900,
-  transfer_tax_seller: 'NY State + County, varies; budget 0.4%–0.65% total',
-  seller_concession_caps: {
-    fha: 'Up to 6% of price',
-    conventional_primary: '3% at 90–95% LTV; 6% at 75–90%; 9% at <=75%',
-  },
-};
-
-app.post('/tools/calc_payment', (req, res) => {
-  const { price, downPct, rate, termYears, tax, insurance, mi } = req.body || {};
-  const monthly = calcMonthlyPayment({ price, downPct, rate, termYears, tax, insurance, mi });
-  res.json({ ok: true, monthly });
-});
-
-app.get('/tools/buffalo_info', (req, res) => {
-  res.json({ ok: true, buffalo: buffaloCheat });
-});
-
-// --- HTTP + WS server ---
+// ---- Start HTTP server & WS upgrade ----------------------------------------
 const server = app.listen(PORT, () => {
-  console.log(`Server listening on :${PORT}`);
+  console.log(`[HTTP] ✅ Listening on :${PORT}`);
 });
 
 const wss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
-  const url = new URL(req.url, 'http://localhost');
-  if (url.pathname === '/twilio-stream') {
+  const u = new URL(req.url, 'http://localhost');
+  if (u.pathname === '/twilio-stream') {
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
     });
@@ -221,148 +180,117 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
-// --- OpenAI Realtime WS ---
+// ---- OpenAI Realtime socket factory ----------------------------------------
 async function createOpenAIRealtimeSocket() {
-  const { default: WebSocket } = await import('ws');
-  const model = 'gpt-4o-realtime-preview-2024-10-01';
-  const url = `wss://api.openai.com/v1/realtime?model=${model}`;
-  const oai = new WebSocket(url, {
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      'OpenAI-Beta': 'realtime=v1',
-    },
+  const { default: WS } = await import('ws');
+  const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY missing');
+
+  const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
+  const ws = new WS(url, {
+    headers: { Authorization: `Bearer ${key}`, 'OpenAI-Beta': 'realtime=v1' },
     perMessageDeflate: false,
   });
 
-  oai.on('error', (err) => console.error('OpenAI WS error:', err.message));
-  oai.on('open', () => console.log('OpenAI Realtime connected'));
+  ws.on('open', () => console.log('[OAI] ✅ Realtime connected'));
+  ws.on('error', (err) => console.error('[OAI] ❌ WS error:', err?.message || err));
+  ws.on('close', (code, reason) =>
+    console.log('[OAI] ✖︎ Realtime closed', code, String(reason || ''))
+  );
 
-  return oai;
+  return ws;
 }
 
-// --- Twilio ↔ OpenAI Bridge ---
+// ---- Twilio media bridge ----------------------------------------------------
 wss.on('connection', async (ws, req) => {
-  const url = new URL(req.url, 'http://localhost');
-  const callSid = url.searchParams.get('callSid') || uuidv4();
-  console.log('Twilio stream connected', callSid);
+  const u = new URL(req.url, 'http://localhost');
+  const callSid = u.searchParams.get('callSid') || uuidv4();
+
+  console.log('[WS] ▶︎ Twilio stream connected', { callSid });
 
   let transcriptParts = [];
   let callerNumber = null;
   let twilioStreamSid = null;
-  let outboundSequence = 1;
+  let outboundSeq = 1;
   let outboundChunk = 1;
-  let streamStartTime = null;
+  let streamStartMs = Date.now();
   let commitPending = false;
 
-  const oai = await createOpenAIRealtimeSocket();
+  let oai;
+  try {
+    oai = await createOpenAIRealtimeSocket();
+  } catch (e) {
+    console.error('[WS] ❌ Failed to create OpenAI socket:', e);
+    ws.close();
+    return;
+  }
 
-  // --- OpenAI → Twilio (audio + text) ---
-  oai.on('message', (message) => {
+  // OpenAI → Twilio (speak back)
+  oexion(oai, 'message', (message) => {
     try {
       const evt = JSON.parse(message.toString());
-
-      if (evt.type === 'response.output_text.delta' && evt.delta) {
+      if (evt.type === 'response.output_text.delta' && evt?.delta) {
         transcriptParts.push(`[AI] ${evt.delta}`);
       }
+      if (evt.type === 'response.audio.delta' && evt?.data) {
+        const pcm24 = Buffer.from(evt.data, 'base64');
+        const pcm8 = resamplePCM16(pcm->    24000, 8000);
+        const mu = pcmTo->mu(pcm8); // Uint8Array
+        const muBuf = Buffer.from(mu.buffer);
+        const payload = muBuf.toString('base64');
 
-      if (evt.type === 'response.audio.delta' && evt.delta && twilioStreamSid) {
-        const now = Date.now();
-        const ts = streamStartTime ? Math.floor(now - streamStartTime) : 0;
-
-        // OpenAI: PCM16 24 kHz → Twilio: μ-law 8 kHz
-        const pcm24kBuffer = Buffer.from(evt.delta, 'base64');
-        const pcm8kBuffer = resample(pcm24kBuffer, 24000, 8000);
-
-        // Convert the 8 kHz PCM buffer to an Int16Array for encoding
-        const pcm8kInt16 = new Int16Array(
-          pcm8kBuffer.buffer,
-          pcm8kBuffer.byteOffset,
-          pcm8kBuffer.length / 2
-        );
-        const mulawUint8 = pcmToMulaw(pcm8kInt16); // Returns a Uint8Array
-        const mulawBuffer = Buffer.from(mulawUint8.buffer);
-        const payload = mulawBuffer.toString('base64');
-
-        const twilioMsgObj = {
+        const media = {
           event: 'media',
           streamSid: twilioStreamSid,
-          sequenceNumber: String(outboundSequence++),
+          sequenceNumber: String(outboundSeq++),
           media: {
             track: 'outbound',
             chunk: String(outboundChunk++),
-            timestamp: String(ts),
+            timestamp: String(Date.now() - streamStartMs),
             payload,
           },
         };
-        ws.send(JSON.stringify(twilioMsgObj));
+        ws.send(JSON.stringify(media));
       }
-    } catch (e) {
-      console.error('Error parsing OAI message', e);
+    } catch (err) {
+      console.error('[WS] ❌ handle OAI message error:', err);
     }
   });
 
-  oai.on('close', () => console.log('Realtime socket closed for', callSid));
-
-  // --- Twilio → OpenAI ---
-  ws.on('message', (data) => {
+  oexon(ws, 'message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
-
       if (msg.event === 'start') {
         twilioStreamSid = msg.start?.streamSid || msg.streamSid || null;
-        streamStartTime = Date.now();
         callerNumber = msg?.start?.from || null;
+        streamStartMs = Date.now();
 
-        const sys = {
+        const sessionUpdate = {
           type: 'session.update',
           session: {
             instructions: `
-You are Brendan's AI assistant for mortgages and real estate in Buffalo, NY. 
-You have a bright, upbeat, professional tone and always introduce yourself as Brendan's AI assistant.
-
-Capabilities:
-- Hold a conversation and answer any mortgage or real estate question, including complex mortgage guideline questions about Fannie Mae, Freddie Mac, VA, FHA, and USDA.
-- Qualify callers (purchase/refi/VA/FHA/USDA/Conventional; price/down/credit band/DTI guess).
-- Estimate payments using the calc tool when asked.
-- Offer to text the loan application link when appropriate.
-- Take messages and let callers know they can ask for anything.
-- Book meetings using CALENDLY_LINK if provided.
-- Provide Buffalo-local context (taxes, attorney fees, typical closing costs).
-
-Compliance:
-- Not a commitment to lend. Estimates only. Terms subject to underwriting.
-- Avoid any prohibited-basis discussions. Offer to connect with a licensed loan officer for specifics.
-- Always be respectful and inclusive.
-`.trim(),
+You are a professional, helpful mortgage assistant for Brendan’s team in Buffalo, NY.
+Speak clearly, concise, friendly, and confident. Offer to send the loan application link when appropriate.
+Avoid any discriminatory criteria. Clarify you are an AI assistant for the team.`,
             modalities: ['text', 'audio'],
-            voice: 'alloy',
+            voice: process.env.OPENAI_VOICE || 'alloy',
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 600,
-            },
+            turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 600 },
           },
         };
-        oai.send(JSON.stringify(sys));
+        oai.send(JSON.stringify(session->te));
+        console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
       } else if (msg.event === 'media' && msg.media?.payload) {
-        // Twilio: μ-law 8 kHz → OpenAI: PCM16 24 kHz
-        const mulawBuffer = Buffer.from(msg.media.payload, 'base64');
-        const pcm8k = mulawToPcm(mulawBuffer); // Int16Array
-        const pcm8kBuffer = Buffer.from(pcm8k.buffer, pcm8k.byteOffset, pcm8k.byteLength);
-        const pcm24kBuffer = resample(pcm8kBuffer, 8000, 24000);
-        const base64Pcm = pcm24kBuffer.toString('base64');
+        // Twilio: μ-law 8 kHz -> PCM16 24 kHz
+        const muBuf = Buffer.from(msg.media.payload, 'base64');
+        const pcm8 = mulawToPcm(muBuf); // Int16Array (8 kHz)
+        const pcm8Buf = Buffer.from(pcm8.buffer, pcm8.byteOffset, pcm8.byteLength);
+        const pcm24 = resamplePCM16(pcm8Buf, 8000, 24000);
+        const audio = pcm24.toString('base64');
 
-        oai.send(
-          JSON.stringify({
-            type: 'input_audio_buffer.append',
-            audio: base64Pcm,
-          })
-        );
-
-        // Throttle commits to avoid overload
+        oai.send(JSON.stringify({ type: 'input_audio_buffer.append', audio }));
         if (!commitPending) {
           commitPending = true;
           setTimeout(() => {
@@ -373,39 +301,63 @@ Compliance:
       } else if (msg.event === 'stop') {
         oai.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
         oai.send(JSON.stringify({ type: 'response.create', response: { modalities: ['audio', 'text'] } }));
-
+        console.log('[WS] ◀︎ Twilio stop', { callSid });
         setTimeout(async () => {
           try {
-            const transcript = transcriptParts.join('\n').trim();
-            const tldr = await summarizeTLDR(transcript);
-            const appLink = process.env.APPLICATION_LINK || 'https://movement.com/lo/brendan-burns';
+            const tldr = await summarizeTLDR(transcriptParts.join('\n'));
             if (process.env.AUTO_FOLLOW_UP === 'true' && callerNumber) {
-              await sendSMS(
-                callerNumber,
-                `Thanks for calling Brendan's team. Start your application here: ${appLink}`
-              );
+              const appLink = process.env.APPLICATION_LINK || 'https://movement.com/lo/brendan-burns';
+              await send->S(callerNumber, `Thanks for calling Brendan's team. Start your application here: ${appLink}`);
             }
-            const html = `
-<h2>Call Summary (Auto TLDR)</h2>
-<pre style="white-space:pre-wrap;">${tldr}</pre>
-<hr/>
-<h3>Full Transcript (assistant side)</h3>
-<pre style="white-space:pre-wrap;">${transcript}</pre>`;
-            await sendEmail({ subject: 'New Call — TLDR + Transcript', html });
-          } catch (e) {
-            console.error('Follow-up error', e?.message);
+            await sendEmail({
+              subject: `New Call – ${callerNumber ?? ''} (${callSid})`,
+              html: `<h2>Call Summary (Auto TLDR)</h2><pre>${tldr}</pre><hr/><pre>${transcriptPoints.join('<br/>')}</pre>`,
+            });
+          } catch (err) {
+            console.error('[WS] ❗ follow-up error:', err);
           }
-        }, 1500);
+        }, 1200);
       }
-    } catch (e) {
-      console.error('Bad WS message', e);
+    } catch (err) {
+      console.error('[WS] ❌ handle Twilio message error:', err, { raw: data?.toString?.() });
     }
   });
 
-  ws.on('close', () => {
-    console.log('Twilio stream closed', callSid);
-    try {
-      oai.close();
-    } catch {}
+  oexon(ws, 'close', () => {
+    console.log('[WS] ✖︎ Twilio stream closed', { callSid });
+    try { oai?.close(); } catch {}
   });
 });
+
+// ---- TLDR helper ------------------------------------------------------------
+async function summarizeTLDR(transcript) {
+  try {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) return 'No summary (no OPENAI_API_KEY).';
+    const r = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You write crisp 3–6 bullet TLDRs for mortgage calls.' },
+          { role: 'user', content: `Summarize this call:\n\n${transcript}` },
+        ],
+        max_tokens: 240,
+        temperature: 0.2,
+      },
+      { headers: { Authorization: `Bearer ${key}` } }
+    );
+    return r.data?.choices?.[0]?.message?.content?.trim?.() ?? '—';
+  } catch (e) {
+    console.error('[TLDR] error:', e?.message || e);
+    return '—';
+  }
+}
+
+// ---- small helpers for robust event handling with ws ------------------------
+function oexion(emitter, event, handler) {
+  emitter.on(event, (msg, ...rest) => {
+    try { handler(msg, ...rest); } catch (e) { console.error(`[WS] handler error (${event})`, e); }
+  });
+}
+function oexon(emitter, event, handler) { oexion(emitter, event, handler); }
