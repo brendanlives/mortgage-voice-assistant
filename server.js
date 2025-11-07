@@ -262,16 +262,19 @@ wss.on('connection', async (ws, req) => {
     try {
       const evt = JSON.parse(message.toString());
       
-      // When session is updated, trigger the greeting
-      if (evt.type === 'session.updated' && !greetingSent) {
+      console.log('[OAI] Event:', evt.type); // Debug logging
+      
+      // When session is created/updated, trigger the greeting
+      if ((evt.type === 'session.updated' || evt.type === 'session.created') && !greetingSent && twilioStreamSid) {
         greetingSent = true;
         sessionConfigured = true;
-        console.log('[OAI] Session configured, triggering greeting');
+        console.log('[OAI] ✅ Session ready, triggering greeting');
         setTimeout(() => {
+          console.log('[OAI] Sending greeting request');
           oai.send(JSON.stringify({
             type: 'response.create',
           }));
-        }, 200);
+        }, 500);
       }
       
       if (evt.type === 'response.output_text.delta' && evt?.delta) {
@@ -299,6 +302,10 @@ wss.on('connection', async (ws, req) => {
         };
         ws.send(JSON.stringify(media));
       }
+      
+      if (evt.type === 'error') {
+        console.error('[OAI] ❌ Error event:', evt);
+      }
     } catch (err) {
       console.error('[WS] ❌ handle OAI message error:', err);
     }
@@ -313,6 +320,8 @@ wss.on('connection', async (ws, req) => {
         twilioStreamSid = msg.start?.streamSid || msg.streamSid || null;
         callerNumber = msg?.start?.from || null;
         streamStartMs = Date.now();
+        
+        console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
 
         const sessionUpdate = {
           type: 'session.update',
@@ -367,12 +376,12 @@ Remember: You represent Brendan's mortgage team. Be knowledgeable, helpful, and 
         };
         
         if (oaiReady) {
+          console.log('[WS] Sending session.update to OpenAI');
           oai.send(JSON.stringify(sessionUpdate));
         } else {
+          console.log('[WS] Queueing session.update (OpenAI not ready)');
           messageQueue.push(sessionUpdate);
         }
-        
-        console.log('[WS] ▶︎ Twilio start', { callSid, twilioStreamSid, from: callerNumber });
         
       } else if (msg.event === 'media' && msg.media?.payload) {
         const muBuf = Buffer.from(msg.media.payload, 'base64');
