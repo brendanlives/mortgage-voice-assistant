@@ -350,11 +350,31 @@ Answer naturally, conversationally, like you actually know this stuff. Because y
 
 # TOOLS
 You can:
+- **send_application_link**: Text them the mortgage application link (use this when they want to apply)
 - **schedule_meeting**: Book time with ${loanOfficerName}
-- **send_application**: Text them the app link
-- **get_guideline_info**: Look up specific loan details
+- **web_search**: Search the internet for current rates, guidelines, market info, or anything you're not sure about
+- **get_guideline_info**: Look up specific loan details from your knowledge base
 
 Use these naturally when it makes sense.
+
+## When to Use Web Search
+Use web_search when:
+- They ask about current/today's rates
+- They ask about recent changes in lending rules
+- They want local market info (home prices in their area, etc.)
+- You're not 100% sure about something current
+- They ask "what's the latest..." or "current..."
+
+Examples:
+- "What are mortgage rates today?" → search "current mortgage rates Buffalo NY"
+- "Did FHA guidelines change?" → search "FHA loan guidelines 2024 changes"
+- "What are homes selling for in my area?" → search "home prices [their city]"
+
+## Sending Application Links
+When they want to apply or get started:
+1. Get their phone number if you don't have it
+2. Use send_application_link with their number
+3. Tell them "Just texted you the link!"
 
 You're helpful, knowledgeable, and sound like an actual human. Not a robot, not overly professional, just... real.`;
 }
@@ -394,32 +414,47 @@ const ASSISTANT_TOOLS = [
   },
   {
     type: 'function',
-    name: 'send_application',
-    description: 'Send the mortgage application link via SMS or email to the caller.',
+    name: 'send_application_link',
+    description: 'Send the mortgage application link via SMS text message to the caller. Use this when they want to get started with the application.',
     parameters: {
       type: 'object',
       properties: {
-        phone: {
+        phone_number: {
           type: 'string',
-          description: 'Phone number to send SMS (include country code)'
+          description: 'The phone number to send the SMS to (must include country code, e.g., +1234567890)'
         },
-        email: {
+        caller_name: {
           type: 'string',
-          description: 'Email address to send link (optional)'
-        },
-        application_type: {
-          type: 'string',
-          enum: ['purchase', 'refinance', 'general'],
-          description: 'Type of mortgage application'
+          description: 'The caller\'s first name (optional, for personalization)'
         }
       },
-      required: ['phone', 'application_type']
+      required: ['phone_number']
+    }
+  },
+  {
+    type: 'function',
+    name: 'web_search',
+    description: 'Search the internet for current information about mortgages, real estate, rates, or any related topic. Use this when you need up-to-date information or to answer specific questions about current market conditions, recent changes in lending guidelines, or local real estate information.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The search query (e.g., "current mortgage rates Buffalo NY", "FHA loan limit 2024", "VA loan recent changes")'
+        },
+        topic: {
+          type: 'string',
+          description: 'The general topic category',
+          enum: ['rates', 'guidelines', 'local_market', 'general']
+        }
+      },
+      required: ['query']
     }
   },
   {
     type: 'function',
     name: 'get_guideline_info',
-    description: 'Get specific mortgage guideline information for VA, FHA, USDA, Fannie Mae, or Freddie Mac loans.',
+    description: 'Get specific mortgage guideline information for VA, FHA, USDA, Fannie Mae, or Freddie Mac loans from the internal knowledge base.',
     parameters: {
       type: 'object',
       properties: {
@@ -469,37 +504,89 @@ async function handleFunctionCall(functionName, functionArgs, callerNumber, call
       
       return {
         success: true,
-        message: `Great! I've sent you a calendar link via text. I also let ${process.env.LOAN_OFFICER_NAME || 'Brendan'} know you want to schedule for ${preferred_date}.`
+        message: `Perfect! I just texted you the calendar link. ${process.env.LOAN_OFFICER_NAME || 'Brendan'} will call you at ${preferred_date}.`
       };
     }
     
-    if (functionName === 'send_application') {
-      const { phone, email, application_type } = functionArgs;
+    if (functionName === 'send_application_link') {
+      const { phone_number, caller_name } = functionArgs;
       const applicationLink = process.env.APPLICATION_LINK || 'https://movement.com/lo/brendan-burns';
       
-      const messageMap = {
-        purchase: `Ready to buy? Start your mortgage application here: ${applicationLink}`,
-        refinance: `Let's refinance! Start your application here: ${applicationLink}`,
-        general: `Start your mortgage application here: ${applicationLink}`
-      };
+      const greeting = caller_name ? `Hi ${caller_name}!` : 'Hi!';
+      const message = `${greeting} Ready to get started? Here's your mortgage application: ${applicationLink}`;
       
-      await sendSMS(phone, messageMap[application_type]);
+      const result = await sendSMS(phone_number, message);
       
-      if (email) {
-        await sendEmail({
-          subject: 'Your Mortgage Application Link',
-          html: `
-            <p>Thank you for your interest! You can start your mortgage application here:</p>
-            <p><a href="${applicationLink}">${applicationLink}</a></p>
-            <p>Questions? Call us anytime!</p>
-          `
-        });
+      if (result.ok) {
+        return {
+          success: true,
+          message: "Just sent it! Check your phone - the application link should be there now. Takes about 10-15 minutes to complete."
+        };
+      } else {
+        return {
+          success: false,
+          message: "Hmm, having trouble sending the text. Let me get your email and I can send it that way instead."
+        };
       }
+    }
+    
+    if (functionName === 'web_search') {
+      const { query, topic } = functionArgs;
       
-      return {
-        success: true,
-        message: "Perfect! Just sent the application link to your phone. Should be there any second now!"
-      };
+      console.log('[WEB_SEARCH] Searching for:', query);
+      
+      // Use a simple search API - you can use Google Custom Search, Bing, or SerpAPI
+      // For now, I'll show you how to structure it with axios
+      try {
+        // You'll need to add SERP_API_KEY to your .env file
+        // Sign up at https://serpapi.com for free tier
+        const serpApiKey = process.env.SERP_API_KEY;
+        
+        if (!serpApiKey) {
+          console.warn('[WEB_SEARCH] No SERP_API_KEY configured');
+          return {
+            success: false,
+            message: "I don't have web search configured right now, but let me tell you what I know from my training..."
+          };
+        }
+        
+        const searchResponse = await axios.get('https://serpapi.com/search', {
+          params: {
+            q: query,
+            api_key: serpApiKey,
+            engine: 'google',
+            num: 3  // Get top 3 results
+          },
+          timeout: 5000
+        });
+        
+        const results = searchResponse.data?.organic_results || [];
+        
+        if (results.length === 0) {
+          return {
+            success: false,
+            message: "Couldn't find anything on that. Let me see what I know..."
+          };
+        }
+        
+        // Format the results for the AI to use
+        const formattedResults = results.slice(0, 3).map((r, i) => 
+          `${i + 1}. ${r.title}: ${r.snippet}`
+        ).join('\n');
+        
+        return {
+          success: true,
+          search_results: formattedResults,
+          message: `Based on what I found: ${formattedResults}`
+        };
+        
+      } catch (error) {
+        console.error('[WEB_SEARCH] Error:', error.message);
+        return {
+          success: false,
+          message: "Having trouble searching right now, but based on what I know..."
+        };
+      }
     }
     
     if (functionName === 'get_guideline_info') {
