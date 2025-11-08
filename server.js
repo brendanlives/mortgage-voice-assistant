@@ -636,7 +636,7 @@ wss.on('connection', async (ws, req) => {
       session: {
         instructions: createSystemInstructions(),
         modalities: ['text', 'audio'],
-        voice: 'shimmer',
+        voice: 'alloy',
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
         input_audio_transcription: {
