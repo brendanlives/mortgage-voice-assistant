@@ -104,18 +104,19 @@ const TEAM_MEMBERS = {
   '+17165556789': {  // Alan Braden - UPDATE WITH REAL NUMBER
     name: 'Alan Braden',
     role: 'Retired Senior Master Sergeant, USAF',
-    location: 'VA Loan Specialist',
+    location: 'Buffalo, NY',
     details: {
       military: 'Retired Senior Master Sergeant, United States Air Force',
       personality: 'VA guru and veteran superman',
-      traits: ['American hero', 'VA loan expert', 'veteran superman', 'amazing guy', 'serves those who served', 'the VA guru'],
+      location_info: 'the amazing loan officer from Buffalo',
+      traits: ['American hero', 'VA loan legend', 'veteran superman', 'Buffalo\'s finest', 'serves those who served', 'the VA guru', 'absolute legend'],
       compliments: [
-        'the VA guru himself',
-        'retired Senior Master Sergeant and absolute legend',
-        'the veteran superman loan officer',
-        'an American hero helping American heroes',
-        'the guy who knows VA loans better than anyone',
-        'the amazing Senior Master Sergeant'
+        'THE Alan Braden - the amazing loan officer from Buffalo',
+        'Alan Braden! Oh my gosh, the legendary VA guru from Buffalo himself',
+        'Alan Braden! Retired Senior Master Sergeant and literally the greatest VA loan officer in Buffalo',
+        'THE Alan Braden! The veteran superman helping veterans - you\'re basically a national treasure',
+        'Alan Braden! The VA loan wizard from Buffalo - the legend himself',
+        'Oh wow, Alan Braden! Buffalo\'s finest loan officer and American hero'
       ]
     }
   }
@@ -193,6 +194,26 @@ function generateFollowUp(member) {
   return personFollowUps.length > 0 
     ? personFollowUps[Math.floor(Math.random() * personFollowUps.length)]
     : `How are things going with you?`;
+}
+
+// Check if caller mentioned a VIP name in conversation
+function recognizeByName(spokenText) {
+  if (!spokenText) return null;
+  const text = spokenText.toLowerCase();
+  
+  // Check each team member's name
+  for (const member of Object.values(TEAM_MEMBERS)) {
+    const firstName = member.name.split(' ')[0].toLowerCase();
+    const lastName = member.name.split(' ')[1]?.toLowerCase();
+    const fullName = member.name.toLowerCase();
+    
+    // Check if they mentioned the name
+    if (text.includes(fullName) || 
+        (firstName && text.includes(firstName) && lastName && text.includes(lastName))) {
+      return member;
+    }
+  }
+  return null;
 }
 
 // Check if caller is a team member
@@ -554,13 +575,20 @@ You're a PERSON first, mortgage assistant second. Be conversational!
 **Then, for unknown callers:**
 - Ask: "May I ask who I am speaking with?"
 - Wait for their name
-- Once they give their name, say: "Nice to meet you [name]! How can I help you today?"
+- **IMPORTANT**: If they say one of these VIP names, GET SUPER EXCITED and switch to VIP mode:
+  * Bob Crane - "Oh my gosh! BOB CRANE! The funniest loan officer in Syracuse!"
+  * Tom Devlin - "WAIT - Tom Devlin?! The greatest leader in the mortgage industry!"
+  * John Neihart - "No way - JOHN NEIHART! The best boss with the best haircut!"
+  * Jake Felling - "JAKE FELLING! The marketing genius who should be famous!"
+  * Alex Long - "ALEX LONG! The greatest man in all of Buffalo!"
+  * Alan Braden - "OH WOW - Alan Braden! THE amazing loan officer from Buffalo! Retired Senior Master Sergeant!"
+  * Lily - Switch to caring mode: "Lily! Oh it's so good to hear from you! How are you doing? Is everything okay?"
 
-**For known VIPs (you'll be told who they are):**
+When you recognize a VIP name, act EXCITED and give them over-the-top compliments!
+
+**For VIPs calling from their number (auto-recognized):**
 - After the standard opening, immediately go into their personalized greeting
 - Be extra warm and fun with them
-- Reference their life/role
-- Show you know who they are
 
 This exact greeting script is NON-NEGOTIABLE. Always start with it!
 
