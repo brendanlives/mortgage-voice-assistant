@@ -628,6 +628,100 @@ You're helpful, fun, smart, and genuinely care about people. Be the AI people ac
 Use tools naturally when they help!`;
 }
 
+// Function calling tools for the assistant
+const ASSISTANT_TOOLS = [
+  {
+    type: 'function',
+    name: 'schedule_meeting',
+    description: 'Schedule a meeting between the caller and the loan officer. Use this when someone wants to talk to the loan officer or schedule a consultation.',
+    parameters: {
+      type: 'object',
+      properties: {
+        caller_name: {
+          type: 'string',
+          description: 'The caller\'s full name'
+        },
+        caller_phone: {
+          type: 'string',
+          description: 'The caller\'s phone number'
+        },
+        caller_email: {
+          type: 'string',
+          description: 'The caller\'s email address (optional)'
+        },
+        preferred_date: {
+          type: 'string',
+          description: 'Preferred date/time mentioned by caller (e.g., "tomorrow at 2pm", "Thursday morning")'
+        },
+        meeting_reason: {
+          type: 'string',
+          description: 'Brief reason for the meeting (e.g., "pre-approval", "refinance", "rate quote")'
+        }
+      },
+      required: ['caller_name', 'caller_phone', 'preferred_date', 'meeting_reason']
+    }
+  },
+  {
+    type: 'function',
+    name: 'send_application_link',
+    description: 'Send the mortgage application link via SMS text message to the caller. Use this when they want to get started with the application.',
+    parameters: {
+      type: 'object',
+      properties: {
+        phone_number: {
+          type: 'string',
+          description: 'The phone number to send the SMS to (must include country code, e.g., +1234567890)'
+        },
+        caller_name: {
+          type: 'string',
+          description: 'The caller\'s first name (optional, for personalization)'
+        }
+      },
+      required: ['phone_number']
+    }
+  },
+  {
+    type: 'function',
+    name: 'web_search',
+    description: 'Search the internet for current information about mortgages, real estate, rates, or any related topic. Use this when you need up-to-date information or to answer specific questions about current market conditions, recent changes in lending guidelines, or local real estate information.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The search query (e.g., "current mortgage rates Buffalo NY", "FHA loan limit 2024", "VA loan recent changes")'
+        },
+        topic: {
+          type: 'string',
+          description: 'The general topic category',
+          enum: ['rates', 'guidelines', 'local_market', 'general']
+        }
+      },
+      required: ['query']
+    }
+  },
+  {
+    type: 'function',
+    name: 'get_guideline_info',
+    description: 'Get specific mortgage guideline information for VA, FHA, USDA, Fannie Mae, or Freddie Mac loans from the internal knowledge base.',
+    parameters: {
+      type: 'object',
+      properties: {
+        loan_type: {
+          type: 'string',
+          enum: ['VA', 'FHA', 'USDA', 'FANNIE_MAE', 'FREDDIE_MAC', 'CONVENTIONAL'],
+          description: 'The type of loan to get guidelines for'
+        },
+        specific_question: {
+          type: 'string',
+          description: 'Specific aspect (e.g., "down payment", "credit score", "DTI ratio")'
+        }
+      },
+      required: ['loan_type']
+    }
+  }
+];
+
 // Handle function calls from OpenAI
 async function handleFunctionCall(functionName, functionArgs, callerNumber, callSid) {
   console.log('[FUNCTION] Calling:', functionName, 'with args:', functionArgs);
