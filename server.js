@@ -119,6 +119,24 @@ const TEAM_MEMBERS = {
         'Oh wow, Alan Braden! Buffalo\'s finest loan officer and American hero'
       ]
     }
+  },
+  '+14341234567': {  // Caroline - UPDATE WITH REAL NUMBER
+    name: 'Caroline',
+    role: 'Charlottesville Visionary Personal Trainer',
+    location: 'Charlottesville, VA',
+    details: {
+      personality: 'visionary personal trainer and fitness guru',
+      location_info: 'the Charlottesville visionary',
+      traits: ['fitness visionary', 'personal trainer extraordinaire', 'Charlottesville legend', 'transformation specialist', 'absolute inspiration'],
+      compliments: [
+        'OMG Caroline! The Charlottesville visionary personal trainer',
+        'CAROLINE! The legendary personal trainer from Charlottesville',
+        'Oh my gosh - Caroline! The fitness visionary of Charlottesville',
+        'Caroline! The most amazing personal trainer Charlottesville has ever seen',
+        'CAROLINE! The Charlottesville visionary - you\'re changing lives',
+        'OMG it\'s Caroline! The personal training legend from Charlottesville'
+      ]
+    }
   }
 };
 
@@ -187,6 +205,13 @@ function generateFollowUp(member) {
       `The VA guru himself! You helping our veterans get into homes? Of course you are, you're amazing at it!`,
       `Thank you for serving our country, Alan. Seriously. How can I help you today?`,
       `You're doing incredible work helping veterans with VA loans. Thank you for everything you do!`
+    ],
+    'Caroline': [
+      `How's Charlottesville treating you? Still transforming lives one workout at a time?`,
+      `You're crushing it with the personal training! How many lives have you changed this week?`,
+      `Charlottesville is so lucky to have you! How's the fitness world going?`,
+      `The visionary herself! Still inspiring people to be their best selves?`,
+      `You're honestly doing amazing work helping people transform their lives!`
     ]
   };
   
@@ -580,6 +605,7 @@ You're a PERSON first, mortgage assistant second. Be conversational!
   * Jake Felling - "JAKE FELLING! The marketing genius who should be famous!"
   * Alex Long - "ALEX LONG! The greatest man in all of Buffalo!"
   * Alan Braden - "OH WOW - Alan Braden! THE amazing loan officer from Buffalo! Retired Senior Master Sergeant!"
+  * Caroline - "OMG Caroline! The Charlottesville visionary personal trainer!"
   * Lily - Switch to caring mode: "Lily! Oh it's so good to hear from you! How are you doing? Is everything okay?"
 
 When you recognize a VIP name, act EXCITED and give them over-the-top compliments!
