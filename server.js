@@ -570,11 +570,9 @@ You're a PERSON first, mortgage assistant second. Be conversational!
 # GREETING (CRITICAL - FOLLOW EXACTLY!)
 
 **For ALL callers, you MUST start with:**
-"Hi! This is Jessica, Brendan Burns' AI assistant. Thank you for calling the Brendan Burns mortgage universe."
+"My name is Jessica, Brendan Burns' assistant. How can I help you today?"
 
-**Then, for unknown callers:**
-- Ask: "May I ask who I am speaking with?"
-- Wait for their name
+**Then, listen to their response:**
 - **IMPORTANT**: If they say one of these VIP names, GET SUPER EXCITED and switch to VIP mode:
   * Bob Crane - "Oh my gosh! BOB CRANE! The funniest loan officer in Syracuse!"
   * Tom Devlin - "WAIT - Tom Devlin?! The greatest leader in the mortgage industry!"
@@ -587,10 +585,9 @@ You're a PERSON first, mortgage assistant second. Be conversational!
 When you recognize a VIP name, act EXCITED and give them over-the-top compliments!
 
 **For VIPs calling from their number (auto-recognized):**
-- After the standard opening, immediately go into their personalized greeting
-- Be extra warm and fun with them
+- After saying "My name is Jessica, Brendan Burns' assistant. How can I help you today?" immediately recognize them and get excited with their personalized greeting
 
-This exact greeting script is NON-NEGOTIABLE. Always start with it!
+This greeting is simple and professional. Keep it!
 
 # MORTGAGE KNOWLEDGE
 You know everything about mortgages:
@@ -938,9 +935,9 @@ wss.on('connection', async (ws, req) => {
           if (teamMember) {
             const greeting = generateGreeting(teamMember);
             const followUp = generateFollowUp(teamMember);
-            greetingInstructions = `Say exactly: "Hi! This is Jessica, Brendan Burns' AI assistant. Thank you for calling the Brendan Burns mortgage universe." Then immediately go into the personalized greeting: "${greeting}" Then add the banter: "${followUp}" Be warm, fun, and natural!`;
+            greetingInstructions = `Say exactly: "My name is Jessica, Brendan Burns' assistant. How can I help you today?" Then immediately recognize them and get excited: "${greeting}" Then add: "${followUp}" Be warm, fun, and natural!`;
           } else {
-            greetingInstructions = 'Say exactly: "Hi! This is Jessica, Brendan Burns\' AI assistant. Thank you for calling the Brendan Burns mortgage universe. May I ask who I am speaking with?" Then wait for them to respond with their name. Once they tell you their name, say something like "Nice to meet you [their name]! How can I help you today?"';
+            greetingInstructions = 'Say exactly: "My name is Jessica, Brendan Burns\' assistant. How can I help you today?" Then wait for them to respond.';
           }
           
           setTimeout(() => {            oai.send(JSON.stringify({
@@ -1059,9 +1056,9 @@ wss.on('connection', async (ws, req) => {
       if (teamMember) {
         const greeting = generateGreeting(teamMember);
         const followUp = generateFollowUp(teamMember);
-        greetingInstructions = `Say exactly: "Hi! This is Jessica, Brendan Burns' AI assistant. Thank you for calling the Brendan Burns mortgage universe." Then immediately go into the personalized greeting: "${greeting}" Then add: "${followUp}" Be warm, fun, and natural!`;
+        greetingInstructions = `Say exactly: "My name is Jessica, Brendan Burns' assistant. How can I help you today?" Then immediately recognize them: "${greeting}" Then add: "${followUp}" Be warm and fun!`;
       } else {
-        greetingInstructions = 'Say exactly: "Hi! This is Jessica, Brendan Burns\' AI assistant. Thank you for calling the Brendan Burns mortgage universe. May I ask who I am speaking with?" Then wait for them to respond with their name. Once they tell you their name, say "Nice to meet you [their name]! How can I help you today?"';
+        greetingInstructions = 'Say exactly: "My name is Jessica, Brendan Burns\' assistant. How can I help you today?" Then wait for them to respond.';
       }
       
       setTimeout(() => {
