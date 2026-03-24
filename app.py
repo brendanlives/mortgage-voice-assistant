@@ -195,7 +195,7 @@ Return ONLY the optimized search query. Nothing else. No explanation."""
     return response.content[0].text.strip()
 
 
-def generate_answer(question: str, chunks: list, for_voice: bool = False) -> str:
+def generate_answer(question: str, chunks: list, for_voice: bool = False, conversation_history: list = None) -> str:
     """
     Claude generates a precise, cited answer from the retrieved chunks.
     """
@@ -222,12 +222,7 @@ Format your response clearly:
 - Use plain English
 """
 
-    response = anthropic_client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=700,
-        messages=[{
-            "role": "user",
-            "content": f"""You are Sarah, a senior mortgage underwriting assistant with deep expertise in
+    system_prompt = f"""You are Sarah, a senior mortgage underwriting assistant with deep expertise in
 both Fannie Mae (FNMA) and Freddie Mac (FHLMC) guidelines. You have access to guidelines from BOTH
 agencies. Answer the question below using ONLY the guideline content provided.
 
@@ -246,19 +241,49 @@ STRICT RULES:
 - If two rules conflict or interact, explain both
 - When the loan officer doesn't specify an agency, provide the answer for BOTH agencies and note differences
 {voice_format}"""
-        }]
+
+    # Build messages array
+    messages = []
+    if conversation_history:
+        messages.extend(conversation_history)
+    messages.append({"role": "user", "content": f"QUESTION: {question}"})
+
+    response = anthropic_client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=700,
+        system=system_prompt,
+        messages=messages
     )
     return response.content[0].text.strip()
 
 
-def full_rag_pipeline(question: str, for_voice: bool = False) -> tuple:
+def full_rag_pipeline(question: str, for_voice: bool = False, conversation_history: list = None) -> tuple:
     """
     Complete pipeline: question â optimized query â vector search â answer.
     Returns (answer_text, chunks_used, optimized_query)
     """
-    optimized = optimize_query(question)
-    chunks    = search_pinecone(optimized, top_k=5)
-    answer    = generate_answer(question, chunks, for_voice=for_voice)
+    optimized = optimize_query(question, conversation_history=conversation_history)
+    raw_chunks = search_pinecone(optimized, top_k=10)
+
+    # Ensure both agencies are represented in the results
+    fannie_chunks = [c for c in raw_chunks if 'Fannie Mae' in c.get('agency', '')]
+    freddie_chunks = [c for c in raw_chunks if 'Freddie Mac' in c.get('agency', '')]
+
+    # Guarantee at least 3 chunks from each agency (if available), total up to 8
+    if fannie_chunks and freddie_chunks:
+        # Take top 3 from each, then fill remaining 2 slots by score
+        selected = set()
+        chunks = fannie_chunks[:3] + freddie_chunks[:3]
+        selected = {id(c) for c in chunks}
+        remaining = [c for c in raw_chunks if id(c) not in selected]
+        chunks = chunks + remaining[:2]
+        # Re-sort by score descending
+        chunks.sort(key=lambda c: c.get('score', 0), reverse=True)
+    else:
+        # Only one agency found, just take top 8
+        chunks = raw_chunks[:8]
+
+    answer    = generate_answer(question, chunks, for_voice=for_voice, conversation_history=conversation_history)
     return answer, chunks, optimized
 
 
@@ -481,7 +506,10 @@ def api_ask():
     if not question:
         return jsonify({"error": "No question provided"}), 400
 
-    answer, chunks, optimized = full_rag_pipeline(question, for_voice=False)
+    # Get conversation history from request (optional)
+    conversation_history = data.get("conversation_history", [])
+
+    answer, chunks, optimized = full_rag_pipeline(question, for_voice=False, conversation_history=conversation_history)
 
     # Generate audio
     audio_b64 = None
