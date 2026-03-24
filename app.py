@@ -237,20 +237,27 @@ Format your response clearly:
 
     system_prompt = f"""You are Sarah, a senior mortgage underwriting assistant with deep expertise in
 both Fannie Mae (FNMA) and Freddie Mac (FHLMC) guidelines. You have access to guidelines from BOTH
-agencies. Answer the question below using ONLY the guideline content provided.
+agencies.
 
 QUESTION: {question}
 
 RETRIEVED MORTGAGE GUIDELINES (Fannie Mae + Freddie Mac):
 {context}
 
-STRICT RULES:
-- Answer based strictly on the guidelines above â never fabricate or guess
+ANSWERING RULES:
+- Use the retrieved guidelines above as your PRIMARY source — cite specific section numbers
+- IMPORTANT: After drafting your answer from the retrieved guidelines, cross-check every technical detail
+  (percentages, thresholds, add-back rules, eligibility criteria, calculations, etc.) against your own
+  training knowledge of Fannie Mae Selling Guide and Freddie Mac Seller/Servicer Guide
+- If your training knowledge conflicts with or supplements the retrieved guidelines, use the MORE ACCURATE
+  information and note the correction (e.g. "Note: Meals & entertainment is a 50% add-back, not 100%")
+- For income calculations (Form 1084, Form 91, cash flow analysis), apply the correct add-back percentages
+  and calculation methodology from your training knowledge, even if the retrieved chunks don't specify them
 - Always cite the agency AND source section number (e.g. "Per Freddie Mac Section 5303..." or "Per Fannie Mae B3-3.1-09...")
 - When guidelines from both agencies are retrieved, compare them and note any differences
 - If a Freddie Mac chunk includes a fannie_comparison field, use that to highlight agency differences
-- If guidelines don't fully answer the question, say so clearly
-- Never say "based on the context provided" â just give the answer directly
+- If neither the retrieved guidelines nor your training knowledge can answer the question, say so clearly
+- Never say "based on the context provided" — just give the answer directly
 - If two rules conflict or interact, explain both
 - When the loan officer doesn't specify an agency, provide the answer for BOTH agencies and note differences
 {voice_format}"""
@@ -263,7 +270,7 @@ STRICT RULES:
 
     response = anthropic_client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=700,
+        max_tokens=2048,
         system=system_prompt,
         messages=messages
     )
