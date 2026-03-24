@@ -677,7 +677,7 @@
 
     try {
       const apiUrl = getApiUrl();
-      const response = await fetch(apiUrl + '/api/ask', {
+      const response = await fetch(apiUrl + '/api/ask-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -690,20 +690,93 @@
         throw new Error(`Server error: ${response.status}`);
       }
 
-      const data = await response.json();
-
-      // Remove typing indicator
+      // Remove typing indicator and create streaming message container
       removeTypingIndicator();
+      const thread = document.getElementById('chatThread');
+      const emptyState = thread.querySelector('.empty-state');
+      if (emptyState) {
+        thread.classList.remove('empty');
+        thread.innerHTML = '';
+      }
 
-      if (data.error) {
-        renderChatMessage('assistant', `Error: ${data.error}`);
-      } else {
-        // Add to conversation history
+      const group = document.createElement('div');
+      group.className = 'message-group assistant-msg';
+      const msg = document.createElement('div');
+      msg.className = 'message assistant';
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'assistant-content';
+      const answerDiv = document.createElement('div');
+      answerDiv.className = 'answer-content';
+      answerDiv.textContent = '';
+      contentDiv.appendChild(answerDiv);
+      msg.appendChild(contentDiv);
+      group.appendChild(msg);
+      thread.appendChild(group);
+
+      // Read SSE stream
+      let fullAnswer = '';
+      let sources = null;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        let eventType = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7);
+          } else if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+            if (eventType === 'metadata') {
+              sources = data.sources;
+            } else if (eventType === 'token') {
+              fullAnswer += data.text;
+              answerDiv.innerHTML = renderMarkdownish(fullAnswer);
+              thread.scrollTop = thread.scrollHeight;
+            } else if (eventType === 'error') {
+              fullAnswer = 'Error: ' + data.error;
+              answerDiv.innerHTML = renderMarkdownish(fullAnswer);
+            }
+            eventType = '';
+          }
+        }
+      }
+
+      // Add sources after streaming is done
+      if (sources && sources.length > 0) {
+        const sourcesToggle = document.createElement('div');
+        sourcesToggle.className = 'sources-toggle';
+        sourcesToggle.textContent = '\uD83D\uDCDA ' + sources.length + ' source(s)';
+        const sourcesList = document.createElement('div');
+        sourcesList.className = 'sources-list';
+        sourcesToggle.onclick = (e) => {
+          sourcesList.classList.toggle('shown');
+          e.stopPropagation();
+        };
+        contentDiv.appendChild(sourcesToggle);
+        sources.forEach(s => {
+          const tag = document.createElement('div');
+          tag.className = 'source-tag';
+          let text = '<span class="source-agency">' + escapeHtml(s.agency || 'Unknown') + '</span>';
+          if (s.source_section) text += ' \u00A7' + escapeHtml(s.source_section);
+          if (s.score) text += ' <span class="source-score">' + (s.score * 100).toFixed(1) + '%</span>';
+          tag.innerHTML = text;
+          sourcesList.appendChild(tag);
+        });
+        contentDiv.appendChild(sourcesList);
+      }
+
+      // Add to conversation history
+      if (fullAnswer && !fullAnswer.startsWith('Error:')) {
         conversationHistory.push({ role: 'user', content: input });
-        conversationHistory.push({ role: 'assistant', content: data.answer });
-
-        // Render assistant response with sources
-        renderChatMessage('assistant', data.answer, data.sources);
+        conversationHistory.push({ role: 'assistant', content: fullAnswer });
       }
 
     } catch (err) {
@@ -715,7 +788,6 @@
       document.getElementById('questionInput').focus();
     }
   }
-
   function newConversation() {
     conversationHistory = [];
     document.getElementById('chatThread').innerHTML = `
