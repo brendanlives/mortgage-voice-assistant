@@ -270,7 +270,7 @@ ANSWERING RULES:
 
     response = anthropic_client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2048,
+        max_tokens=1200,
         system=system_prompt,
         messages=messages
     )
@@ -283,7 +283,7 @@ def full_rag_pipeline(question: str, for_voice: bool = False, conversation_histo
     Returns (answer_text, chunks_used, optimized_query)
     """
     optimized = optimize_query(question, conversation_history=conversation_history)
-    raw_chunks = search_pinecone(optimized, top_k=10)
+    raw_chunks = search_pinecone(optimized, top_k=6)
 
     # Ensure both agencies are represented in the results
     fannie_chunks = [c for c in raw_chunks if 'Fannie Mae' in c.get('agency', '')]
