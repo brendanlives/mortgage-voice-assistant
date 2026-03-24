@@ -1,5 +1,5 @@
 """
-Mortgage Guideline Voice Agent v2
+Mortgage Guideline Voice Agent v2x
 ââââââââââââââââââââââââââââââââââ
 Architecture:
   Pinecone        â vector database (true semantic search)
@@ -163,13 +163,27 @@ def build_context(chunks: list) -> str:
     return "\n\n" + ("â" * 60) + "\n\n".join(parts)
 
 
-def optimize_query(conversation_text: str) -> str:
+def optimize_query(conversation_text: str, conversation_history: list = None) -> str:
     """
     Claude turns the full conversation context into the optimal search query.
     This is the key step that makes voice work so well.
+
+    Args:
+        conversation_text: The user's current question/statement
+        conversation_history: Optional list of prior messages [{"role": "user", "content": "..."}, ...]
     """
     if not anthropic_client:
         return conversation_text
+
+    # Build context from conversation history if provided
+    history_context = ""
+    if conversation_history:
+        history_context = "\nCONVERSATION HISTORY:\n"
+        for msg in conversation_history:
+            role = msg.get("role", "").upper()
+            content = msg.get("content", "")
+            history_context += f"{role}: {content}\n"
+        history_context += "\nNEW QUESTION:\n"
 
     response = anthropic_client.messages.create(
         model="claude-sonnet-4-6",
@@ -179,12 +193,12 @@ def optimize_query(conversation_text: str) -> str:
             "content": f"""You are a mortgage underwriting search specialist.
 
 A loan officer described this scenario:
-{conversation_text}
+{history_context}{conversation_text}
 
 Extract the key underwriting concepts and write a precise search query that will find
 the correct mortgage guideline from Fannie Mae and/or Freddie Mac. Focus on: loan type,
 borrower characteristics, property type, occupancy, LTV, DTI, credit score, income type,
-asset type, agency-specific requirements â whatever is most relevant to the question.
+asset type, agency-specific requirements — whatever is most relevant to the question.
 
 If the loan officer asks about a specific agency (Fannie Mae or Freddie Mac), include the
 agency name in your query. If they ask about differences between agencies, include both names.
@@ -193,7 +207,6 @@ Return ONLY the optimized search query. Nothing else. No explanation."""
         }]
     )
     return response.content[0].text.strip()
-
 
 def generate_answer(question: str, chunks: list, for_voice: bool = False, conversation_history: list = None) -> str:
     """
