@@ -270,7 +270,7 @@ ANSWERING RULES:
 
     response = anthropic_client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1200,
+        max_tokens=2048,
         system=system_prompt,
         messages=messages
     )
@@ -283,7 +283,7 @@ def full_rag_pipeline(question: str, for_voice: bool = False, conversation_histo
     Returns (answer_text, chunks_used, optimized_query)
     """
     optimized = optimize_query(question, conversation_history=conversation_history)
-    raw_chunks = search_pinecone(optimized, top_k=6)
+    raw_chunks = search_pinecone(optimized, top_k=10)
 
     # Ensure both agencies are represented in the results
     fannie_chunks = [c for c in raw_chunks if 'Fannie Mae' in c.get('agency', '')]
@@ -551,6 +551,110 @@ def api_ask():
             "score":          round(c.get("score", 0), 3)
         } for c in chunks]
     })
+
+
+@app.route("/api/ask-stream", methods=["POST"])
+def api_ask_stream():
+    """Streaming version of /api/ask — returns Server-Sent Events."""
+    data     = request.get_json()
+    question = data.get("question", "").strip()
+    if not question:
+        return jsonify({"error": "No question provided"}), 400
+
+    conversation_history = data.get("conversation_history", [])
+
+    def generate():
+        try:
+            # Step 1: Optimize query
+            optimized = optimize_query(question, conversation_history=conversation_history)
+
+            # Step 2: Search Pinecone
+            raw_chunks = search_pinecone(optimized, top_k=10)
+
+            # Ensure both agencies represented
+            fannie_chunks = [c for c in raw_chunks if 'Fannie Mae' in c.get('agency', '')]
+            freddie_chunks = [c for c in raw_chunks if 'Freddie Mac' in c.get('agency', '')]
+            if fannie_chunks and freddie_chunks:
+                selected = set()
+                chunks = fannie_chunks[:3] + freddie_chunks[:3]
+                selected = {id(c) for c in chunks}
+                remaining = [c for c in raw_chunks if id(c) not in selected]
+                chunks = chunks + remaining[:2]
+                chunks.sort(key=lambda c: c.get('score', 0), reverse=True)
+            else:
+                chunks = raw_chunks[:8]
+
+            # Send metadata (sources) first
+            sources = [{
+                "chunk_id":       c.get("chunk_id"),
+                "agency":         c.get("agency", ""),
+                "topic":          c.get("topic"),
+                "source_section": c.get("source_section"),
+                "score":          round(c.get("score", 0), 3)
+            } for c in chunks]
+            yield f"event: metadata\ndata: {json.dumps({'optimized_query': optimized, 'sources': sources})}\n\n"
+            # Step 3: Build prompt (same as generate_answer)
+            context = build_context(chunks)
+            voice_format = """
+Format your response clearly:
+- Lead with the key rule and any critical thresholds
+- Cite the source section (e.g. "Per B3-6-02...")
+- List important exceptions or conditions
+- Use plain English
+"""
+            system_prompt = f"""You are Sarah, a senior mortgage underwriting assistant with deep expertise in
+both Fannie Mae (FNMA) and Freddie Mac (FHLMC) guidelines. You have access to guidelines from BOTH
+agencies.
+
+QUESTION: {question}
+
+RETRIEVED MORTGAGE GUIDELINES (Fannie Mae + Freddie Mac):
+{context}
+
+ANSWERING RULES:
+- Use the retrieved guidelines above as your PRIMARY source — cite specific section numbers
+- IMPORTANT: After drafting your answer from the retrieved guidelines, cross-check every technical detail
+  (percentages, thresholds, add-back rules, eligibility criteria, calculations, etc.) against your own
+  training knowledge of Fannie Mae Selling Guide and Freddie Mac Seller/Servicer Guide
+- If your training knowledge conflicts with or supplements the retrieved guidelines, use the MORE ACCURATE
+  information and note the correction (e.g. "Note: Meals & entertainment is a 50% add-back, not 100%")
+- For income calculations (Form 1084, Form 91, cash flow analysis), apply the correct add-back percentages
+  and calculation methodology from your training knowledge, even if the retrieved chunks don't specify them
+- Always cite the agency AND source section number (e.g. "Per Freddie Mac Section 5303..." or "Per Fannie Mae B3-3.1-09...")
+- When guidelines from both agencies are retrieved, compare them and note any differences
+- If a Freddie Mac chunk includes a fannie_comparison field, use that to highlight agency differences
+- If neither the retrieved guidelines nor your training knowledge can answer the question, say so clearly
+- Never say "based on the context provided" — just give the answer directly
+- If two rules conflict or interact, explain both
+- When the loan officer doesn't specify an agency, provide the answer for BOTH agencies and note differences
+{voice_format}"""
+
+            messages = []
+            if conversation_history:
+                messages.extend(conversation_history)
+            messages.append({"role": "user", "content": f"QUESTION: {question}"})
+
+            # Step 4: Stream Claude response
+            with anthropic_client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=2048,
+                system=system_prompt,
+                messages=messages
+            ) as stream:
+                for text in stream.text_stream:
+                    yield f"event: token\ndata: {json.dumps({'text': text})}\n\n"
+
+            yield f"event: done\ndata: {json.dumps({})}\n\n"
+
+        except Exception as e:
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+        'Connection': 'keep-alive'
+    })
+
 
 
 @app.route("/api/feedback", methods=["POST"])
