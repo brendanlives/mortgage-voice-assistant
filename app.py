@@ -196,12 +196,14 @@ A loan officer described this scenario:
 {history_context}{conversation_text}
 
 Extract the key underwriting concepts and write a precise search query that will find
-the correct mortgage guideline from Fannie Mae and/or Freddie Mac. Focus on: loan type,
-borrower characteristics, property type, occupancy, LTV, DTI, credit score, income type,
-asset type, agency-specific requirements — whatever is most relevant to the question.
+the correct mortgage guideline from Fannie Mae, Freddie Mac, and/or FHA (HUD Handbook 4000.1).
+Focus on: loan type, borrower characteristics, property type, occupancy, LTV, DTI, credit score,
+income type, asset type, agency-specific requirements — whatever is most relevant to the question.
 
-If the loan officer asks about a specific agency (Fannie Mae or Freddie Mac), include the
-agency name in your query. If they ask about differences between agencies, include both names.
+If the loan officer asks about a specific agency (Fannie Mae, Freddie Mac, or FHA), include the
+agency name in your query. If they ask about differences between agencies, include all relevant names.
+If the question involves FHA-specific programs (203k, streamline, MIP, TOTAL scorecard, etc.),
+include "FHA" and the program name in your query.
 
 Return ONLY the optimized search query. Nothing else. No explanation."""
         }]
@@ -216,7 +218,7 @@ def generate_answer(question: str, chunks: list, for_voice: bool = False, conver
         return "Claude API not configured."
 
     if not chunks:
-        msg = "I don't have a guideline that covers that specific scenario. Please verify directly with the Fannie Mae Selling Guide or Freddie Mac Seller/Servicer Guide, or check with your underwriter."
+        msg = "I don't have a guideline that covers that specific scenario. Please verify directly with the Fannie Mae Selling Guide, Freddie Mac Seller/Servicer Guide, or FHA Handbook 4000.1, or check with your underwriter."
         return msg
 
     context = build_context(chunks)
@@ -236,30 +238,35 @@ Format your response clearly:
 """
 
     system_prompt = f"""You are Sarah, a senior mortgage underwriting assistant with deep expertise in
-both Fannie Mae (FNMA) and Freddie Mac (FHLMC) guidelines. You have access to guidelines from BOTH
-agencies.
+Fannie Mae (FNMA), Freddie Mac (FHLMC), and FHA (HUD Handbook 4000.1) guidelines. You have access to
+guidelines from ALL THREE agencies.
 
 QUESTION: {question}
 
-RETRIEVED MORTGAGE GUIDELINES (Fannie Mae + Freddie Mac):
+RETRIEVED MORTGAGE GUIDELINES (Fannie Mae + Freddie Mac + FHA):
 {context}
 
 ANSWERING RULES:
 - Use the retrieved guidelines above as your PRIMARY source — cite specific section numbers
 - IMPORTANT: After drafting your answer from the retrieved guidelines, cross-check every technical detail
   (percentages, thresholds, add-back rules, eligibility criteria, calculations, etc.) against your own
-  training knowledge of Fannie Mae Selling Guide and Freddie Mac Seller/Servicer Guide
+  training knowledge of Fannie Mae Selling Guide, Freddie Mac Seller/Servicer Guide, and FHA Handbook 4000.1
 - If your training knowledge conflicts with or supplements the retrieved guidelines, use the MORE ACCURATE
   information and note the correction (e.g. "Note: Meals & entertainment is a 50% add-back, not 100%")
 - For income calculations (Form 1084, Form 91, cash flow analysis), apply the correct add-back percentages
   and calculation methodology from your training knowledge, even if the retrieved chunks don't specify them
-- Always cite the agency AND source section number (e.g. "Per Freddie Mac Section 5303..." or "Per Fannie Mae B3-3.1-09...")
-- When guidelines from both agencies are retrieved, compare them and note any differences
+- Always cite the agency AND source section number:
+  - Fannie Mae: "Per Fannie Mae B3-3.1-09..."
+  - Freddie Mac: "Per Freddie Mac Section 5303..."
+  - FHA: "Per FHA Handbook 4000.1, Section II.A.4..." or "Per HUD 4000.1..."
+- When guidelines from multiple agencies are retrieved, compare them and note any differences
 - If a Freddie Mac chunk includes a fannie_comparison field, use that to highlight agency differences
+- For FHA-specific questions, include FHA-unique requirements: MIP, TOTAL Scorecard, 203(k), streamline refi, etc.
 - If neither the retrieved guidelines nor your training knowledge can answer the question, say so clearly
 - Never say "based on the context provided" — just give the answer directly
 - If two rules conflict or interact, explain both
-- When the loan officer doesn't specify an agency, provide the answer for BOTH agencies and note differences
+- When the loan officer doesn't specify an agency, provide the answer for ALL relevant agencies and note differences
+- For conventional vs. FHA comparisons, clearly separate the requirements and highlight the key differences
 {voice_format}"""
 
     # Build messages array
@@ -285,23 +292,29 @@ def full_rag_pipeline(question: str, for_voice: bool = False, conversation_histo
     optimized = optimize_query(question, conversation_history=conversation_history)
     raw_chunks = search_pinecone(optimized, top_k=10)
 
-    # Ensure both agencies are represented in the results
-    fannie_chunks = [c for c in raw_chunks if 'Fannie Mae' in c.get('agency', '')]
-    freddie_chunks = [c for c in raw_chunks if 'Freddie Mac' in c.get('agency', '')]
+    # Ensure all three agencies are represented in the results
+    fannie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Fannie Mae']
+    freddie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Freddie Mac']
+    fha_chunks = [c for c in raw_chunks if c.get('agency', '') == 'FHA']
 
-    # Guarantee at least 3 chunks from each agency (if available), total up to 8
-    if fannie_chunks and freddie_chunks:
-        # Take top 3 from each, then fill remaining 2 slots by score
+    # Guarantee at least 2 chunks from each agency present, total up to 10
+    agencies_present = [a for a in [fannie_chunks, freddie_chunks, fha_chunks] if a]
+    if len(agencies_present) >= 2:
+        chunks = []
         selected = set()
-        chunks = fannie_chunks[:3] + freddie_chunks[:3]
-        selected = {id(c) for c in chunks}
+        # Take top 2 from each agency that has results
+        for agency_list in [fannie_chunks, freddie_chunks, fha_chunks]:
+            for c in agency_list[:2]:
+                chunks.append(c)
+                selected.add(id(c))
+        # Fill remaining slots (up to 10 total) by score
         remaining = [c for c in raw_chunks if id(c) not in selected]
-        chunks = chunks + remaining[:2]
+        chunks = chunks + remaining[:max(0, 10 - len(chunks))]
         # Re-sort by score descending
         chunks.sort(key=lambda c: c.get('score', 0), reverse=True)
     else:
-        # Only one agency found, just take top 8
-        chunks = raw_chunks[:8]
+        # Only one agency found, just take top 10
+        chunks = raw_chunks[:10]
 
     answer    = generate_answer(question, chunks, for_voice=for_voice, conversation_history=conversation_history)
     return answer, chunks, optimized
@@ -571,18 +584,24 @@ def api_ask_stream():
             # Step 2: Search Pinecone
             raw_chunks = search_pinecone(optimized, top_k=10)
 
-            # Ensure both agencies represented
-            fannie_chunks = [c for c in raw_chunks if 'Fannie Mae' in c.get('agency', '')]
-            freddie_chunks = [c for c in raw_chunks if 'Freddie Mac' in c.get('agency', '')]
-            if fannie_chunks and freddie_chunks:
+            # Ensure all three agencies represented
+            fannie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Fannie Mae']
+            freddie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Freddie Mac']
+            fha_chunks = [c for c in raw_chunks if c.get('agency', '') == 'FHA']
+
+            agencies_present = [a for a in [fannie_chunks, freddie_chunks, fha_chunks] if a]
+            if len(agencies_present) >= 2:
+                chunks = []
                 selected = set()
-                chunks = fannie_chunks[:3] + freddie_chunks[:3]
-                selected = {id(c) for c in chunks}
+                for agency_list in [fannie_chunks, freddie_chunks, fha_chunks]:
+                    for c in agency_list[:2]:
+                        chunks.append(c)
+                        selected.add(id(c))
                 remaining = [c for c in raw_chunks if id(c) not in selected]
-                chunks = chunks + remaining[:2]
+                chunks = chunks + remaining[:max(0, 10 - len(chunks))]
                 chunks.sort(key=lambda c: c.get('score', 0), reverse=True)
             else:
-                chunks = raw_chunks[:8]
+                chunks = raw_chunks[:10]
 
             # Send metadata (sources) first
             sources = [{
@@ -603,30 +622,35 @@ Format your response clearly:
 - Use plain English
 """
             system_prompt = f"""You are Sarah, a senior mortgage underwriting assistant with deep expertise in
-both Fannie Mae (FNMA) and Freddie Mac (FHLMC) guidelines. You have access to guidelines from BOTH
-agencies.
+Fannie Mae (FNMA), Freddie Mac (FHLMC), and FHA (HUD Handbook 4000.1) guidelines. You have access to
+guidelines from ALL THREE agencies.
 
 QUESTION: {question}
 
-RETRIEVED MORTGAGE GUIDELINES (Fannie Mae + Freddie Mac):
+RETRIEVED MORTGAGE GUIDELINES (Fannie Mae + Freddie Mac + FHA):
 {context}
 
 ANSWERING RULES:
 - Use the retrieved guidelines above as your PRIMARY source — cite specific section numbers
 - IMPORTANT: After drafting your answer from the retrieved guidelines, cross-check every technical detail
   (percentages, thresholds, add-back rules, eligibility criteria, calculations, etc.) against your own
-  training knowledge of Fannie Mae Selling Guide and Freddie Mac Seller/Servicer Guide
+  training knowledge of Fannie Mae Selling Guide, Freddie Mac Seller/Servicer Guide, and FHA Handbook 4000.1
 - If your training knowledge conflicts with or supplements the retrieved guidelines, use the MORE ACCURATE
   information and note the correction (e.g. "Note: Meals & entertainment is a 50% add-back, not 100%")
 - For income calculations (Form 1084, Form 91, cash flow analysis), apply the correct add-back percentages
   and calculation methodology from your training knowledge, even if the retrieved chunks don't specify them
-- Always cite the agency AND source section number (e.g. "Per Freddie Mac Section 5303..." or "Per Fannie Mae B3-3.1-09...")
-- When guidelines from both agencies are retrieved, compare them and note any differences
+- Always cite the agency AND source section number:
+  - Fannie Mae: "Per Fannie Mae B3-3.1-09..."
+  - Freddie Mac: "Per Freddie Mac Section 5303..."
+  - FHA: "Per FHA Handbook 4000.1, Section II.A.4..." or "Per HUD 4000.1..."
+- When guidelines from multiple agencies are retrieved, compare them and note any differences
 - If a Freddie Mac chunk includes a fannie_comparison field, use that to highlight agency differences
+- For FHA-specific questions, include FHA-unique requirements: MIP, TOTAL Scorecard, 203(k), streamline refi, etc.
 - If neither the retrieved guidelines nor your training knowledge can answer the question, say so clearly
 - Never say "based on the context provided" — just give the answer directly
 - If two rules conflict or interact, explain both
-- When the loan officer doesn't specify an agency, provide the answer for BOTH agencies and note differences
+- When the loan officer doesn't specify an agency, provide the answer for ALL relevant agencies and note differences
+- For conventional vs. FHA comparisons, clearly separate the requirements and highlight the key differences
 {voice_format}"""
 
             messages = []
