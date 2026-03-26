@@ -211,19 +211,133 @@ A loan officer described this scenario:
 {history_context}{conversation_text}
 
 Extract the key underwriting concepts and write a precise search query that will find
-the correct mortgage guideline from Fannie Mae, Freddie Mac, and/or FHA (HUD Handbook 4000.1).
+the correct mortgage guideline from Fannie Mae, Freddie Mac, FHA (HUD Handbook 4000.1),
+and/or VA (VA Pamphlet 26-7).
 Focus on: loan type, borrower characteristics, property type, occupancy, LTV, DTI, credit score,
 income type, asset type, agency-specific requirements — whatever is most relevant to the question.
 
-If the loan officer asks about a specific agency (Fannie Mae, Freddie Mac, or FHA), include the
-agency name in your query. If they ask about differences between agencies, include all relevant names.
-If the question involves FHA-specific programs (203k, streamline, MIP, TOTAL scorecard, etc.),
-include "FHA" and the program name in your query.
+If the loan officer asks about a specific agency, include the agency name in your query.
+If they ask about differences between agencies, include all relevant names.
 
 Return ONLY the optimized search query. Nothing else. No explanation."""
         }]
     )
     return response.content[0].text.strip()
+
+
+def decompose_into_subtopics(question: str) -> list:
+    """
+    For complex multi-topic questions, break them into distinct sub-queries
+    so each topic gets its own targeted Pinecone search.
+
+    Returns a list of focused search queries, one per topic.
+    For simple single-topic questions, returns an empty list (use standard flow).
+    """
+    if not anthropic_client:
+        return []
+
+    response = anthropic_client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=400,
+        messages=[{
+            "role": "user",
+            "content": f"""You are a mortgage underwriting search specialist.
+
+A loan officer asked this question:
+{question}
+
+Count the DISTINCT mortgage guideline topics in this question. Topics are separate
+underwriting issues that would be found in DIFFERENT sections of the guideline handbooks.
+
+Examples of distinct topics:
+- Borrower eligibility (citizenship, visa status, non-permanent resident)
+- Non-occupant co-borrower / co-signer rules
+- Departure residence / converting primary to rental
+- Rental income from subject property
+- Gift fund documentation and sourcing
+- Foreign language document requirements
+- LTV/down payment for specific property types
+- Credit score requirements
+- DTI limits
+
+If the question has 3 or more distinct topics, output a JSON array of focused search
+queries, one per topic. Each query should be specific enough to find the RIGHT guideline
+section for that ONE topic. Include agency names when relevant.
+
+If the question has 1-2 topics, output: []
+
+Output ONLY the JSON array. No explanation. Examples:
+["Fannie Mae Freddie Mac FHA non-citizen H1B visa borrower eligibility requirements",
+ "non-occupant co-borrower co-signer 2-unit primary residence FHA conventional",
+ "departure residence converting primary to rental income documentation requirements",
+ "rental income from subject 2-unit primary residence qualifying"]"""
+        }]
+    )
+
+    text = response.content[0].text.strip()
+    try:
+        subtopics = json.loads(text)
+        if isinstance(subtopics, list) and len(subtopics) >= 2:
+            return subtopics
+    except json.JSONDecodeError:
+        pass
+    return []
+
+
+def multi_topic_search(question: str, conversation_history: list = None) -> tuple:
+    """
+    Smart search that handles both simple and complex multi-topic questions.
+
+    For simple questions: single optimized search (fast, 1 embedding call)
+    For complex questions: decompose into sub-topics, search each, merge results
+
+    Returns: (chunks, optimized_query_or_summary)
+    """
+    # Step 1: Try to decompose into sub-topics
+    subtopics = decompose_into_subtopics(question)
+
+    if not subtopics:
+        # Simple question — standard single search
+        optimized = optimize_query(question, conversation_history)
+        chunks = search_pinecone(optimized, top_k=10)
+        return chunks, optimized
+
+    # Step 2: Complex question — search each sub-topic separately
+    all_chunks = {}  # chunk_id -> chunk (dedup)
+    for subtopic_query in subtopics:
+        sub_chunks = search_pinecone(subtopic_query, top_k=5)
+        for c in sub_chunks:
+            cid = c.get("chunk_id", "")
+            if cid not in all_chunks or c.get("score", 0) > all_chunks[cid].get("score", 0):
+                all_chunks[cid] = c
+
+    # Step 3: Sort by score, take top chunks with agency balancing
+    merged = sorted(all_chunks.values(), key=lambda c: c.get("score", 0), reverse=True)
+
+    # Agency-balance the merged results
+    fannie = [c for c in merged if c.get("agency", "") == "Fannie Mae"]
+    freddie = [c for c in merged if c.get("agency", "") == "Freddie Mac"]
+    fha = [c for c in merged if c.get("agency", "") == "FHA"]
+    va = [c for c in merged if c.get("agency", "") == "VA"]
+
+    balanced = []
+    selected_ids = set()
+    # Ensure at least 3 chunks per agency that has results
+    for agency_list in [fannie, freddie, fha, va]:
+        for c in agency_list[:3]:
+            cid = c.get("chunk_id", "")
+            if cid not in selected_ids:
+                balanced.append(c)
+                selected_ids.add(cid)
+
+    # Fill remaining slots with highest-scoring unselected chunks
+    remaining = [c for c in merged if c.get("chunk_id", "") not in selected_ids]
+    max_chunks = min(20, 5 * len(subtopics))  # Scale with complexity
+    balanced = balanced + remaining[:max(0, max_chunks - len(balanced))]
+    balanced.sort(key=lambda c: c.get("score", 0), reverse=True)
+
+    summary = f"Multi-topic search: {len(subtopics)} sub-queries, {len(balanced)} chunks retrieved"
+    return balanced, summary
 
 def generate_answer(question: str, chunks: list, for_voice: bool = False, conversation_history: list = None) -> str:
     """
@@ -342,35 +456,10 @@ def full_rag_pipeline(question: str, for_voice: bool = False, conversation_histo
     Complete pipeline: question â optimized query â vector search â answer.
     Returns (answer_text, chunks_used, optimized_query)
     """
-    optimized = optimize_query(question, conversation_history=conversation_history)
-    raw_chunks = search_pinecone(optimized, top_k=10)
+    # Smart search: auto-detects complex multi-topic questions
+    chunks, optimized = multi_topic_search(question, conversation_history)
 
-    # Ensure all four agencies are represented in the results
-    fannie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Fannie Mae']
-    freddie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Freddie Mac']
-    fha_chunks = [c for c in raw_chunks if c.get('agency', '') == 'FHA']
-    va_chunks = [c for c in raw_chunks if c.get('agency', '') == 'VA']
-
-    # Guarantee at least 2 chunks from each agency present, total up to 10
-    agencies_present = [a for a in [fannie_chunks, freddie_chunks, fha_chunks, va_chunks] if a]
-    if len(agencies_present) >= 2:
-        chunks = []
-        selected = set()
-        # Take top 2 from each agency that has results
-        for agency_list in [fannie_chunks, freddie_chunks, fha_chunks, va_chunks]:
-            for c in agency_list[:2]:
-                chunks.append(c)
-                selected.add(id(c))
-        # Fill remaining slots (up to 10 total) by score
-        remaining = [c for c in raw_chunks if id(c) not in selected]
-        chunks = chunks + remaining[:max(0, 10 - len(chunks))]
-        # Re-sort by score descending
-        chunks.sort(key=lambda c: c.get('score', 0), reverse=True)
-    else:
-        # Only one agency found, just take top 10
-        chunks = raw_chunks[:10]
-
-    answer    = generate_answer(question, chunks, for_voice=for_voice, conversation_history=conversation_history)
+    answer = generate_answer(question, chunks, for_voice=for_voice, conversation_history=conversation_history)
     return answer, chunks, optimized
 
 
@@ -677,31 +766,9 @@ def api_ask_stream():
                 yield f"event: done\ndata: {json.dumps({'route': route})}\n\n"
                 return
 
-            # Step 1: Optimize query for RAG
-            optimized = optimize_query(question, conversation_history=conversation_history)
-
-            # Step 2: Search Pinecone
-            raw_chunks = search_pinecone(optimized, top_k=10)
-
-            # Ensure all four agencies represented
-            fannie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Fannie Mae']
-            freddie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Freddie Mac']
-            fha_chunks = [c for c in raw_chunks if c.get('agency', '') == 'FHA']
-            va_chunks = [c for c in raw_chunks if c.get('agency', '') == 'VA']
-
-            agencies_present = [a for a in [fannie_chunks, freddie_chunks, fha_chunks, va_chunks] if a]
-            if len(agencies_present) >= 2:
-                chunks = []
-                selected = set()
-                for agency_list in [fannie_chunks, freddie_chunks, fha_chunks, va_chunks]:
-                    for c in agency_list[:2]:
-                        chunks.append(c)
-                        selected.add(id(c))
-                remaining = [c for c in raw_chunks if id(c) not in selected]
-                chunks = chunks + remaining[:max(0, 10 - len(chunks))]
-                chunks.sort(key=lambda c: c.get('score', 0), reverse=True)
-            else:
-                chunks = raw_chunks[:10]
+            # Step 1+2: Smart search — auto-detects complex multi-topic questions
+            # and runs multiple targeted searches to ensure full topic coverage
+            chunks, optimized = multi_topic_search(question, conversation_history)
 
             # Send metadata (sources)
             sources = [{
