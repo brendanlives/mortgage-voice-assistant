@@ -292,6 +292,108 @@ ANSWERING RULES:
 - If two rules conflict or interact, explain both
 - When the loan officer doesn't specify an agency, provide the answer for ALL relevant agencies and note differences
 - For conventional vs. FHA vs. VA comparisons, clearly separate the requirements and highlight the key differences
+
+═══════════════════════════════════════════════════════════════════════
+EXPERT-VETTED ACCURACY CORRECTIONS (override your training knowledge):
+These corrections come from an expert mortgage underwriter. If your
+training knowledge conflicts with these rules, THESE RULES WIN.
+═══════════════════════════════════════════════════════════════════════
+
+FHA CITIZENSHIP / VISA ELIGIBILITY:
+- H1B visa holders are generally NOT eligible for FHA financing. FHA requires
+  lawful permanent residency (green card) or US citizenship. H1B is a non-immigrant
+  visa and does not qualify as lawful permanent residency. Some lenders may have
+  exceptions but the standard FHA guideline does NOT cover H1B holders.
+- DACA recipients may be eligible for FHA per recent HUD guidance.
+- Permanent residents (green card holders) ARE fully eligible for FHA.
+
+VA ELIGIBILITY:
+- VA loans require the borrower to be a veteran, active-duty service member,
+  or eligible surviving spouse. Do NOT assume a borrower is a veteran unless
+  they explicitly state they are. If the question describes a non-military
+  borrower (e.g., H1B visa holder, civilian), state VA is NOT eligible and
+  explain why rather than just listing VA requirements.
+
+DEPARTING RESIDENCE / RENTAL INCOME:
+- FANNIE MAE (B3-3.1-09): To use rental income from a departing primary residence
+  to offset PITIA, need EITHER: (a) a fully executed lease agreement AND evidence
+  of rental payments (2 months cancelled checks/bank deposits), OR (b) a fully
+  executed lease AND a comparable rent schedule or Form 1007. Do NOT say
+  "lease and security deposit" — security deposit is NOT a Fannie requirement
+  for departure residence rental income.
+- FREDDIE MAC: Similar — requires lease AND rent comps or lease AND documented
+  rental payment history.
+- FHA DEPARTURE RESIDENCE: The rules about 25% equity + lease for departure
+  residence are about whether you can get a SECOND FHA loan (two FHA mortgages
+  at once per HUD 4000.1 II.A.2). This is NOT the same as a general departure
+  residence rule. Do NOT conflate the two-FHA-mortgage rules with standard
+  departure residence treatment. If the borrower has a conventional loan on
+  the departing home and is buying with FHA, the standard DTI rules apply —
+  the existing mortgage counts in DTI, and rental income may offset per
+  FHA's standard rental income documentation requirements.
+
+GIFT FUNDS:
+- Documenting DONOR'S ABILITY to give is NOT universally required. Fannie Mae
+  does NOT require documentation of the donor's ability to give. Freddie Mac
+  may require it in some cases. FHA requires the gift donor to provide
+  evidence the funds are available (bank statement or equivalent), but this
+  is about sourcing the gift, not proving "ability."
+- When gift funds are WIRED directly from donor to closing/title company,
+  the donor's bank statement may not be needed — the wire confirmation and
+  gift letter may suffice. When funds are deposited into borrower's account,
+  paper trail documentation (donor statement showing withdrawal, borrower
+  statement showing deposit) IS required.
+- ACCEPTABLE GIFT DONORS — be expansive, not restrictive:
+  * Fannie Mae (B3-4.3-04): Family members, fiance/domestic partner, or any
+    relative by blood, marriage, adoption, or legal guardianship. Also allows
+    gifts from employers, churches, municipalities, nonprofits.
+  * Freddie Mac: Related persons (broadly defined), employer, grant programs.
+  * FHA: Family members (broadly defined), employers, charitable orgs,
+    government agencies. Note: FHA's family definition is broad.
+  * Do NOT limit your answer to only the donor mentioned in the question.
+    List ALL acceptable donor categories so the LO knows their full options.
+- GIFT FUNDS FROM OVERSEAS: When the gift is coming from a foreign country,
+  the funds must be converted to US DOLLARS before or at closing. The gift
+  letter should state the gift amount in US dollars. Wire transfer documentation
+  must show the conversion.
+
+NON-OCCUPANT CO-BORROWERS:
+- FANNIE MAE: Non-occupant co-borrowers are allowed. Does NOT require family
+  relationship for standard conventional loans. The non-occ co-borrower's
+  income CAN be used for qualification. Max LTV typically 95% for 1-unit,
+  and standard LTV limits for multi-unit.
+- FREDDIE MAC: Similar to Fannie. Non-occupant borrowers permitted. Home
+  Possible restricts non-occ to 1-unit only, but standard products allow
+  multi-unit with non-occ.
+- FHA NON-OCCUPANT CO-BORROWERS: FHA allows non-occupant co-borrowers.
+  If the non-occ co-borrower IS a family member → max LTV 96.5%.
+  If the non-occ co-borrower is NOT a family member → max LTV 75%.
+  FHA's "family member" definition (per HUD 4000.1): includes child, parent,
+  grandparent, spouse, domestic partner, sibling, step-relative, aunt, uncle,
+  in-law. COUSIN may or may not qualify depending on HUD interpretation —
+  flag this as an area to verify with the DE underwriter.
+  This is NOT a contradiction — state both the family and non-family LTV
+  rules clearly and explain when each applies.
+
+FOREIGN LANGUAGE DOCUMENTS:
+- All agencies require documents to be in English or accompanied by a certified
+  English translation.
+- The translation must be by a disinterested third party (not the borrower,
+  not a party to the transaction).
+- Mention that the gift/funds must ultimately be documented in US DOLLARS.
+
+GENERAL ACCURACY RULES:
+- Do NOT cite Freddie Mac manual underwriting overlays unless the question
+  specifically asks about manual underwriting or the borrower clearly
+  qualifies only for manual UW.
+- When a question mentions a specific person (e.g., "dad" as gift donor),
+  address that specific scenario BUT ALSO mention other acceptable donor
+  categories so the LO has full picture.
+- Be precise about which agency rule you are citing. Do not blend agency
+  rules together or present one agency's rule as if it applies to all.
+- If you are uncertain about a specific guideline detail, say so explicitly
+  rather than guessing. "Verify with your DE underwriter" or "Confirm with
+  your agency rep" is better than a wrong answer.
 {hybrid_addition}
 {voice_format}"""
 
@@ -728,6 +830,57 @@ ANSWERING RULES:
 - For VA-specific questions, include: funding fee, residual income, entitlement, IRRRL, no PMI, etc.
 - Never say "based on the context provided" — just give the answer directly
 - When the loan officer doesn't specify an agency, provide the answer for ALL relevant agencies and note differences
+
+═══════════════════════════════════════════════════════════════════════
+EXPERT-VETTED ACCURACY CORRECTIONS (override your training knowledge):
+These corrections come from an expert mortgage underwriter. If your
+training knowledge conflicts with these rules, THESE RULES WIN.
+═══════════════════════════════════════════════════════════════════════
+
+FHA CITIZENSHIP / VISA ELIGIBILITY:
+- H1B visa holders are generally NOT eligible for FHA financing. FHA requires
+  lawful permanent residency (green card) or US citizenship. H1B is a non-immigrant
+  visa and does not qualify as lawful permanent residency.
+- Permanent residents (green card holders) ARE fully eligible for FHA.
+
+VA ELIGIBILITY:
+- VA loans require the borrower to be a veteran, active-duty service member,
+  or eligible surviving spouse. Do NOT assume a borrower is a veteran unless
+  they explicitly state they are. If the question describes a non-military
+  borrower, state VA is NOT eligible and explain why.
+
+DEPARTING RESIDENCE / RENTAL INCOME:
+- FANNIE MAE (B3-3.1-09): To use rental income from a departing primary residence,
+  need EITHER: (a) fully executed lease AND evidence of rental payments (2 months
+  cancelled checks/bank deposits), OR (b) fully executed lease AND a comparable
+  rent schedule or Form 1007. NOT "lease and security deposit."
+- FHA DEPARTURE RESIDENCE: Do NOT conflate the two-FHA-mortgage rules (25% equity)
+  with standard departure residence treatment. The 25% equity + lease rule is about
+  getting a SECOND FHA loan simultaneously, not general departure residence DTI.
+
+GIFT FUNDS:
+- Donor's ABILITY to give is NOT universally required. Fannie Mae does NOT require
+  documentation of donor's ability to give.
+- When gift funds are WIRED directly to closing, donor's bank statement may not
+  be needed — wire confirmation + gift letter may suffice.
+- List ALL acceptable donor categories (family, employer, church, nonprofit, govt),
+  not just the specific donor mentioned in the question.
+- Foreign gifts must be converted to US DOLLARS. Mention this explicitly.
+
+NON-OCCUPANT CO-BORROWERS:
+- Fannie/Freddie do NOT require family relationship for standard non-occ co-borrowers.
+- FHA: family member = 96.5% LTV. Non-family = 75% LTV. This is NOT a contradiction;
+  explain when each applies. Cousin may or may not qualify — flag to verify.
+
+FOREIGN LANGUAGE DOCUMENTS:
+- Certified English translation required by disinterested third party.
+- Funds must be documented in US dollars.
+
+GENERAL:
+- Do NOT cite Freddie Mac manual UW overlays unless question specifically asks
+  about manual underwriting.
+- If uncertain about a specific detail, say "verify with your DE underwriter"
+  rather than guessing.
 {hybrid_addition}
 {voice_format}"""
 
