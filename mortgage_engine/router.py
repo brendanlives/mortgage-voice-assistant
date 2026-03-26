@@ -116,6 +116,24 @@ RAG_PATTERNS = [
     r"(?:non.traditional\s+credit|alternative\s+credit|credit\s+history)",
     r"(?:condo\s+(?:project|approval|review)|warrantable|non.warrantable)",
     r"(?:what\s+are\s+the\s+(?:rules|requirements|guidelines)\s+(?:for|regarding|about))",
+
+    # Immigration / visa / citizenship topics
+    r"(?:h1b|h-1b|h1.b|visa|green\s*card|permanent\s+resident|non.citizen|citizen|immigration|ead|opt|work\s+(?:permit|authorization)|alien)",
+    r"(?:non.permanent|lawful\s+(?:resident|presence)|eligible\s+non.citizen|ineligible\s+non.citizen)",
+
+    # Foreign language / translation / international documents
+    r"(?:foreign|translat|another\s+language|different\s+language|not\s+(?:in\s+)?english|indian|chinese|spanish|korean|hindi|language)",
+    r"(?:foreign\s+(?:bank|asset|income|document|statement)|overseas|international\s+(?:bank|asset|income))",
+
+    # Gift funds / gift letter / gift donor
+    r"(?:gift\s+from|gift\s+money|gifted\s+(?:fund|money|down\s*payment))",
+
+    # Co-signer / co-borrower / non-occupant
+    r"(?:co.sign|cosign|co.borrow|non.occupant|non.occupying|coborrower)",
+
+    # Occupancy change / vacating / converting
+    r"(?:vacat|converting|convert\s+(?:to|my)|current\s+(?:home|house|property).*(?:rent|vacat|move|leave))",
+    r"(?:moving\s+out|rent\s+(?:out|my)|departing\s+residence|primary\s+to\s+(?:rental|investment))",
 ]
 
 
@@ -197,10 +215,33 @@ def classify_query(query: str) -> Dict[str, Any]:
         rule_score += 2
 
     # Determine route
+    #
+    # IMPORTANT: Complex multi-topic questions (visa + gift + co-signer + etc.)
+    # that only match generic "scenario" patterns should NOT dump raw rule engine
+    # output. When RAG dominates and the only rule matches are scenario-level,
+    # route to RAG so the LLM can synthesize a proper answer.
+    #
+    only_scenario_rules = (
+        matched_rule_type == "scenario" and
+        not any(t in SPECIFIC_TYPES for t in all_matched_types)
+    )
+
     if matched_rule_type == "comparison":
         route = ROUTE_COMPARISON
         confidence = min(0.95, 0.6 + rule_score * 0.1)
         reasoning = "Multiple agencies or comparison keywords detected"
+    elif rag_score >= 8 and only_scenario_rules:
+        # Complex multi-topic question — let the LLM handle it entirely
+        # Rule engine would only dump generic numbers that don't help
+        route = ROUTE_RAG
+        confidence = min(0.95, 0.6 + rag_score * 0.1)
+        reasoning = "Complex multi-topic question requiring guideline synthesis (visa, gift, co-signer, etc.)"
+    elif rule_score > 0 and rag_score > 0 and only_scenario_rules and rag_score > rule_score:
+        # RAG-dominant hybrid where rule engine is only scenario-level
+        # Still route hybrid but flag that rule output should be contextual, not primary
+        route = ROUTE_HYBRID
+        confidence = min(0.9, 0.5 + (rule_score + rag_score) * 0.05)
+        reasoning = "Hybrid with RAG-dominant: scenario context + guideline explanations"
     elif rule_score > 0 and rag_score > 0:
         route = ROUTE_HYBRID
         confidence = min(0.9, 0.5 + (rule_score + rag_score) * 0.05)
@@ -237,8 +278,11 @@ def extract_parameters(query: str) -> Dict[str, Any]:
     q = query.lower()
 
     # === Agency ===
+    # Use word-boundary matching to avoid false positives like "vacate" → "va"
     for alias, canonical in AGENCY_ALIASES.items():
-        if alias in q:
+        # Build regex with word boundaries; escape the alias for safety
+        pattern = r'\b' + re.escape(alias) + r'\b'
+        if re.search(pattern, q):
             params["agency"] = canonical
             break
 
@@ -392,7 +436,8 @@ def _count_agencies_mentioned(query: str) -> int:
     """Count how many distinct agencies are mentioned in the query."""
     found = set()
     for alias, canonical in AGENCY_ALIASES.items():
-        if alias in query:
+        pattern = r'\b' + re.escape(alias) + r'\b'
+        if re.search(pattern, query):
             found.add(canonical)
     return len(found)
 
