@@ -438,12 +438,13 @@ def hybrid_stream_preprocess(question: str) -> Dict[str, Any]:
     """
     classification = classify_query(question)
     route = classification["route"]
+    force_rag = classification.get("force_rag", False)
 
     result = {
         "classification": classification,
         "rule_engine_answer": None,
         "rule_citations": [],
-        "use_rag": route in (ROUTE_RAG, ROUTE_HYBRID),
+        "use_rag": route in (ROUTE_RAG, ROUTE_HYBRID) or force_rag,
         "rule_context_block": None,
     }
 
@@ -452,7 +453,9 @@ def hybrid_stream_preprocess(question: str) -> Dict[str, Any]:
         result["rule_engine_answer"] = rule_result.get("combined_answer")
         result["rule_citations"] = [c for c in rule_result.get("citations", []) if c]
 
-        if route == ROUTE_HYBRID:
+        # Build context block for HYBRID or force_rag (complex questions
+        # that route to RULE_ENGINE/COMPARISON but need RAG supplementation)
+        if route == ROUTE_HYBRID or force_rag:
             result["rule_context_block"] = build_rule_engine_context_block(question)
 
     return result

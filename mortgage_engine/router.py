@@ -134,6 +134,27 @@ RAG_PATTERNS = [
     # Occupancy change / vacating / converting
     r"(?:vacat|converting|convert\s+(?:to|my)|current\s+(?:home|house|property).*(?:rent|vacat|move|leave))",
     r"(?:moving\s+out|rent\s+(?:out|my)|departing\s+residence|primary\s+to\s+(?:rental|investment))",
+
+    # Retirement / pension / Social Security / asset depletion income
+    r"(?:retir|pension|social\s+security|ssa\b|401k|401\(k\)|ira\b|annuity|asset\s+depletion)",
+    r"(?:ss\s+(?:income|benefit|disability)|ssdi|ssi\b)",
+    r"(?:income\s+(?:transition|change|switch)|switching\s+(?:to|from)\s+(?:retirement|pension|social))",
+
+    # Reverse mortgage
+    r"(?:reverse\s+mortgage|hecm|home\s+equity\s+conversion)",
+
+    # Waiting periods / derogatory events (supplements the bankruptcy/foreclosure pattern)
+    r"(?:waiting\s+period|seasoning|time\s+since|years?\s+(?:since|after|from)\s+(?:bankruptcy|foreclosure|short\s+sale))",
+
+    # ITIN / SSN / tax ID for non-citizens
+    r"(?:itin|individual\s+tax|no\s+ssn|without\s+(?:ssn|social\s+security\s+number))",
+
+    # Investment property / multiple properties
+    r"(?:investment\s+property|rental\s+property|multiple\s+(?:propert|financed)|5.10\s+(?:propert|financed))",
+    r"(?:\d+\s+(?:financed\s+)?propert|\d+(?:th|st|nd|rd)\s+(?:property|home|rental))",
+
+    # Jumbo / non-conforming / high-balance
+    r"(?:jumbo|non.conforming|high.balance)",
 ]
 
 
@@ -260,12 +281,41 @@ def classify_query(query: str) -> Dict[str, Any]:
         confidence = 0.4
         reasoning = "Ambiguous query — using hybrid for best coverage"
 
+    # ─── COMPLEXITY DETECTION ────────────────────────────────────────────
+    # Complex multi-topic questions (6+ topics) often match many specific
+    # rule types (credit_score, ltv, dti, comparison, etc.) and get routed
+    # to RULE_ENGINE or COMPARISON. But the rule engine can only output
+    # deterministic lookups — it can't explain visa eligibility, waiting
+    # periods, income calculation rules, etc. Force RAG supplementation
+    # for these complex questions so the LLM can synthesize a full answer.
+    #
+    # Criteria for "complex question needing RAG":
+    #   - 3+ distinct rule types matched (multi-faceted), OR
+    #   - 4+ total rule pattern matches AND rag_score >= 2 (many topics)
+    #   - AND the route would otherwise skip RAG (RULE_ENGINE or COMPARISON)
+    # ─────────────────────────────────────────────────────────────────────
+    distinct_rule_types = len(set(all_matched_types))
+    is_complex = (
+        (distinct_rule_types >= 3) or
+        (len(all_matched_types) >= 4 and rag_score >= 2) or
+        (rag_score >= 4 and rule_score > 0)
+    )
+    force_rag = is_complex and route in (ROUTE_RULE_ENGINE, ROUTE_COMPARISON)
+
     return {
         "route": route,
         "rule_type": matched_rule_type,
         "parameters": params,
         "confidence": confidence,
         "reasoning": reasoning,
+        "force_rag": force_rag,
+        "complexity": {
+            "distinct_rule_types": distinct_rule_types,
+            "total_rule_matches": len(all_matched_types),
+            "rag_score": rag_score,
+            "rule_score": rule_score,
+            "is_complex": is_complex,
+        },
     }
 
 

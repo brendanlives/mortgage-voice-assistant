@@ -236,12 +236,13 @@ def decompose_into_subtopics(question: str) -> list:
     if not anthropic_client:
         return []
 
-    response = anthropic_client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=400,
-        messages=[{
-            "role": "user",
-            "content": f"""You are a mortgage underwriting search specialist.
+    try:
+        response = anthropic_client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=500,
+            messages=[{
+                "role": "user",
+                "content": f"""You are a mortgage underwriting search specialist.
 
 A loan officer asked this question:
 {question}
@@ -250,37 +251,50 @@ Count the DISTINCT mortgage guideline topics in this question. Topics are separa
 underwriting issues that would be found in DIFFERENT sections of the guideline handbooks.
 
 Examples of distinct topics:
-- Borrower eligibility (citizenship, visa status, non-permanent resident)
+- Borrower eligibility (citizenship, visa, ITIN, foreign national)
 - Non-occupant co-borrower / co-signer rules
 - Departure residence / converting primary to rental
 - Rental income from subject property
 - Gift fund documentation and sourcing
-- Foreign language document requirements
+- Foreign language document / asset verification requirements
 - LTV/down payment for specific property types
-- Credit score requirements
-- DTI limits
+- Credit score requirements / non-traditional credit
+- DTI limits and calculation
+- MI/MIP/funding fee costs
+- Reserve requirements
+- Waiting periods (bankruptcy, foreclosure, short sale)
+- Income types (retirement, pension, Social Security, self-employment, commission)
+- Reverse mortgage / HECM
+- Investment property / multiple financed properties
+- High-balance / jumbo / non-conforming
 
 If the question has 3 or more distinct topics, output a JSON array of focused search
-queries, one per topic. Each query should be specific enough to find the RIGHT guideline
-section for that ONE topic. Include agency names when relevant.
+queries, one per topic. Each query should:
+1. Be specific enough to find the RIGHT guideline section for that ONE topic
+2. Include ALL relevant agency names (Fannie Mae, Freddie Mac, FHA, VA) when the
+   question asks to compare agencies or says "all agencies"
+3. Use mortgage industry terminology
 
 If the question has 1-2 topics, output: []
 
-Output ONLY the JSON array. No explanation. Examples:
-["Fannie Mae Freddie Mac FHA non-citizen H1B visa borrower eligibility requirements",
- "non-occupant co-borrower co-signer 2-unit primary residence FHA conventional",
+Output ONLY the JSON array, no explanation. Example:
+["Fannie Mae Freddie Mac FHA VA non-citizen H1B visa borrower eligibility requirements",
+ "non-occupant co-borrower co-signer 2-unit primary residence FHA conventional VA",
  "departure residence converting primary to rental income documentation requirements",
- "rental income from subject 2-unit primary residence qualifying"]"""
-        }]
-    )
+ "rental income from subject 2-unit primary residence qualifying FHA conventional"]"""
+            }]
+        )
 
-    text = response.content[0].text.strip()
-    try:
+        text = response.content[0].text.strip()
+        # Handle markdown code blocks
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            text = text.rsplit("```", 1)[0].strip()
         subtopics = json.loads(text)
         if isinstance(subtopics, list) and len(subtopics) >= 2:
             return subtopics
-    except json.JSONDecodeError:
-        pass
+    except Exception as e:
+        print(f"[decompose_into_subtopics] Error: {e}")
     return []
 
 
