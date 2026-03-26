@@ -168,9 +168,13 @@ RAG_PATTERNS = [
     # Student loans / education debt
     r"(?:student\s+loan|education\s+(?:loan|debt)|forbearance|deferment|deferred|ibr|idr|paye|income.(?:driven|based)\s+repayment)",
 
-    # Rental income from subject property (multi-unit)
+    # Rental income from subject property (multi-unit) — including tenant/lease synonyms
     r"(?:rent\s+(?:out|the\s+other|remaining)|rental\s+income\s+from\s+(?:subject|the\s+(?:other|remaining)))",
     r"(?:(?:2|3|4).unit.*rent|rent.*(?:2|3|4).unit|live\s+in\s+one.*rent|multi.unit.*rental)",
+    r"(?:tenant|lease\s+agreement|leased\s+unit|occupied\s+unit|existing\s+tenant)",
+    r"(?:(?:2|3|4).unit.*tenant|tenant.*(?:2|3|4).unit|live\s+in\s+one.*(?:tenant|unit)|multi.unit.*(?:tenant|income))",
+    r"(?:(?:2|3|4).unit.*(?:paying|income|qualifying)|(?:other|remaining)\s+unit)",
+    r"(?:self.sufficiency|net\s+rental|rental\s+offset|(?:use|count).*(?:rent|income).*(?:qualify|offset))",
 
     # Car loan / auto debt
     r"(?:car\s+(?:loan|payment|note|repo)|auto\s+(?:loan|payment|debt))",

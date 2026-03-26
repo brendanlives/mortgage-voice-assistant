@@ -866,6 +866,15 @@ FORMAT:
 - Be concise and actionable
 - Flag red flags and areas requiring underwriter verification
 - Provide a clear recommendation at the end for complex scenarios
+
+TLDR REQUIREMENT:
+- At the very end of EVERY response, add a "## TLDR" section
+- This should be 2-4 sentences MAX — a plain English bottom line
+- Written for a busy loan officer who needs the quick answer
+- Include: can they qualify? what's the biggest issue? what's the key next step?
+- Example: "TLDR: This borrower can likely qualify with Fannie Mae if they increase
+  the down payment to 15%. The main issue is the 2-year employment gap — you'll need
+  a solid LOE. Get the VOR from the previous landlord before submitting."
 {hybrid_addition}
 {voice_format}"""
 
