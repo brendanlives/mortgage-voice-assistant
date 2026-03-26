@@ -155,6 +155,25 @@ RAG_PATTERNS = [
 
     # Jumbo / non-conforming / high-balance
     r"(?:jumbo|non.conforming|high.balance)",
+
+    # Military / VA-specific topics
+    r"(?:active\s+duty|military|veteran|service\s*member|deployed|deployment|va\s+disability|disability\s+(?:rating|income|compensation|exempt))",
+    r"(?:bah|bas\b|base\s+pay|combat\s+pay|hazard\s+pay|flight\s+pay|military\s+(?:income|pay|housing))",
+    r"(?:funding\s+fee\s+exempt|disability\s+exempt|exempt\s+from\s+funding)",
+    r"(?:certificate\s+of\s+eligibility|coe\b|dd.214|va\s+entitlement)",
+
+    # Repossession / collections / charge-offs
+    r"(?:repo(?:ssess)?|repossession|collections?\b|charge.off|judgment|garnishment|tax\s+lien)",
+
+    # Student loans / education debt
+    r"(?:student\s+loan|education\s+(?:loan|debt)|forbearance|deferment|deferred|ibr|idr|paye|income.(?:driven|based)\s+repayment)",
+
+    # Rental income from subject property (multi-unit)
+    r"(?:rent\s+(?:out|the\s+other|remaining)|rental\s+income\s+from\s+(?:subject|the\s+(?:other|remaining)))",
+    r"(?:(?:2|3|4).unit.*rent|rent.*(?:2|3|4).unit|live\s+in\s+one.*rent|multi.unit.*rental)",
+
+    # Car loan / auto debt
+    r"(?:car\s+(?:loan|payment|note|repo)|auto\s+(?:loan|payment|debt))",
 ]
 
 

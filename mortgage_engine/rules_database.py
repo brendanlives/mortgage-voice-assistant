@@ -202,6 +202,49 @@ FANNIE_MAE = {
         },
     },
 
+    # ----- STUDENT LOAN DTI TREATMENT -----
+    "student_loans": {
+        "deferred_or_ibr": {
+            "monthly_payment_calc": "Greater of: 0.5% of outstanding balance OR actual monthly payment",
+            "if_no_payment_reported": "Use 0.5% of outstanding balance",
+            "if_ibr_payment_reported": "Use greater of IBR payment or 0.5% of balance",
+            "fully_deferred": "Use 0.5% of outstanding balance",
+            "forbearance": "Use 0.5% of outstanding balance",
+            "citation": "B3-6-05, Monthly Debt Obligations",
+            "notes": "Fannie Mae changed from 1% to 0.5% effective 2023. If actual documented payment is $0 or not reported, must use 0.5% of balance."
+        },
+        "standard_repayment": {
+            "monthly_payment_calc": "Use actual monthly payment from credit report or documentation",
+            "citation": "B3-6-05",
+        },
+        "forgiveness_programs": {
+            "notes": "Projected forgiveness does NOT reduce the balance for DTI purposes",
+            "citation": "B3-6-05",
+        },
+    },
+
+    # ----- LIABILITY TREATMENT -----
+    "liabilities": {
+        "installment_debt": {
+            "include_if": "More than 10 months remaining",
+            "may_exclude_if": "10 or fewer payments remaining",
+            "citation": "B3-6-05",
+        },
+        "cosigned_debt": {
+            "include_in_dti": True,
+            "exception": "May exclude if primary obligor has made last 12 months payments (documented)",
+            "citation": "B3-6-05",
+        },
+        "derogatory_events": {
+            "bankruptcy_ch7": {"waiting_period_years": 4, "from": "discharge date", "citation": "B3-5.3-07"},
+            "bankruptcy_ch13": {"waiting_period_years": 2, "from": "discharge date", "with_extenuating": 2, "citation": "B3-5.3-07"},
+            "foreclosure": {"waiting_period_years": 7, "with_extenuating": 3, "citation": "B3-5.3-07"},
+            "short_sale": {"waiting_period_years": 4, "with_extenuating": 2, "citation": "B3-5.3-07"},
+            "deed_in_lieu": {"waiting_period_years": 4, "with_extenuating": 2, "citation": "B3-5.3-07"},
+            "repossession": {"waiting_period_years": 4, "with_extenuating": 2, "citation": "B3-5.3-07", "notes": "Treated same as foreclosure for conventional"},
+        },
+    },
+
     # ----- PROPERTY ELIGIBILITY -----
     "property": {
         "eligible": [
@@ -473,6 +516,40 @@ FREDDIE_MAC = {
         "high_balance_1_unit": 1149825,
         "citation": "FHFA Conforming Loan Limits (same as Fannie Mae)",
     },
+
+    # ----- STUDENT LOAN DTI TREATMENT -----
+    "student_loans": {
+        "deferred_or_ibr": {
+            "monthly_payment_calc": "Greater of: 0.5% of outstanding balance OR actual monthly payment",
+            "if_no_payment_reported": "Use 0.5% of outstanding balance",
+            "if_ibr_payment_reported": "Use greater of IBR payment or 0.5% of balance",
+            "fully_deferred": "Use 0.5% of outstanding balance",
+            "forbearance": "Use 0.5% of outstanding balance",
+            "citation": "Section 5501.1, Freddie Mac Seller/Servicer Guide",
+            "notes": "Same as Fannie Mae: 0.5% of outstanding balance if payment is $0, deferred, or in forbearance."
+        },
+        "standard_repayment": {
+            "monthly_payment_calc": "Use actual monthly payment",
+            "citation": "Section 5501.1",
+        },
+    },
+
+    # ----- LIABILITY TREATMENT -----
+    "liabilities": {
+        "cosigned_debt": {
+            "include_in_dti": True,
+            "exception": "May exclude if primary obligor has made last 12 months payments (documented)",
+            "citation": "Section 5501.1",
+        },
+        "derogatory_events": {
+            "bankruptcy_ch7": {"waiting_period_years": 4, "from": "discharge date", "citation": "Section 5202.3"},
+            "bankruptcy_ch13": {"waiting_period_years": 2, "from": "discharge date", "citation": "Section 5202.3"},
+            "foreclosure": {"waiting_period_years": 7, "with_extenuating": 3, "citation": "Section 5202.3"},
+            "short_sale": {"waiting_period_years": 4, "with_extenuating": 2, "citation": "Section 5202.3"},
+            "deed_in_lieu": {"waiting_period_years": 4, "with_extenuating": 2, "citation": "Section 5202.3"},
+            "repossession": {"waiting_period_years": 4, "citation": "Section 5202.3"},
+        },
+    },
 }
 
 
@@ -677,6 +754,41 @@ FHA = {
         "notes": "FHA does NOT allow second homes or investment properties",
         "citation": "HUD 4000.1, II.A.1.a",
     },
+
+    # ----- STUDENT LOAN DTI TREATMENT -----
+    "student_loans": {
+        "deferred_or_ibr": {
+            "monthly_payment_calc": "1% of outstanding balance OR actual documented payment, whichever is greater",
+            "if_no_payment_reported": "Use 1% of outstanding balance",
+            "if_ibr_payment_greater_than_zero": "Use actual IBR/IDR/PAYE payment if documented and > $0",
+            "if_ibr_payment_is_zero": "Use 1% of outstanding balance (cannot use $0)",
+            "fully_deferred": "Use 1% of outstanding balance",
+            "forbearance": "Use 1% of outstanding balance",
+            "citation": "HUD 4000.1, II.A.4.c.ii(E), Student Loans",
+            "notes": "FHA uses 1% (NOT 0.5% like conventional). If the payment is income-driven and > $0, the actual payment may be used. If the IDR payment is $0, must use 1% of balance."
+        },
+        "standard_repayment": {
+            "monthly_payment_calc": "Use actual monthly payment from credit report or documentation",
+            "citation": "HUD 4000.1, II.A.4.c.ii(E)",
+        },
+    },
+
+    # ----- LIABILITY TREATMENT -----
+    "liabilities": {
+        "cosigned_debt": {
+            "include_in_dti": True,
+            "exception": "May exclude if documentation shows another party has made payments for last 12 months",
+            "citation": "HUD 4000.1, II.A.4.c.ii",
+        },
+        "derogatory_events": {
+            "bankruptcy_ch7": {"waiting_period_years": 2, "from": "discharge date", "citation": "HUD 4000.1, II.A.4.a.iv(A)"},
+            "bankruptcy_ch13": {"waiting_period_years": 1, "from": "payout period start", "notes": "Must have 12 months of satisfactory payments and court approval", "citation": "HUD 4000.1, II.A.4.a.iv(A)"},
+            "foreclosure": {"waiting_period_years": 3, "from": "deed transfer or sheriff sale", "citation": "HUD 4000.1, II.A.4.a.iv(B)"},
+            "short_sale": {"waiting_period_years": 3, "citation": "HUD 4000.1, II.A.4.a.iv(B)", "notes": "Treated as pre-foreclosure sale"},
+            "deed_in_lieu": {"waiting_period_years": 3, "citation": "HUD 4000.1, II.A.4.a.iv(B)"},
+            "repossession": {"waiting_period_years": 0, "citation": "HUD 4000.1, II.A.4.a", "notes": "FHA does not have a specific waiting period for repossession, but it must be addressed in LOE and credit analysis"},
+        },
+    },
 }
 
 
@@ -853,6 +965,40 @@ VA = {
         "primary_only": True,
         "notes": "Veteran must certify intent to occupy as primary residence. May rent out other units in 2-4 unit.",
         "citation": "VA Pamphlet 26-7, Ch. 3",
+    },
+
+    # ----- STUDENT LOAN DTI TREATMENT -----
+    "student_loans": {
+        "deferred_or_ibr": {
+            "monthly_payment_calc": "Use actual monthly payment. If $0 or deferred, use 5% of balance divided by 12",
+            "if_no_payment_reported": "5% of outstanding balance / 12",
+            "if_ibr_payment_is_zero": "5% of outstanding balance / 12",
+            "fully_deferred": "5% of outstanding balance / 12",
+            "forbearance": "5% of outstanding balance / 12",
+            "citation": "VA Pamphlet 26-7, Ch. 4, Section 9.e",
+            "notes": "VA uses 5% of balance divided by 12 months as the estimated payment when deferred. This is different from conventional (0.5%) and FHA (1%)."
+        },
+        "standard_repayment": {
+            "monthly_payment_calc": "Use actual monthly payment",
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+    },
+
+    # ----- LIABILITY TREATMENT -----
+    "liabilities": {
+        "cosigned_debt": {
+            "include_in_dti": True,
+            "exception": "May exclude if evidence shows other party has been making payments for 12 months",
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+        "derogatory_events": {
+            "bankruptcy_ch7": {"waiting_period_years": 2, "from": "discharge date", "citation": "VA Pamphlet 26-7, Ch. 4", "notes": "Veteran must have re-established satisfactory credit"},
+            "bankruptcy_ch13": {"waiting_period_years": 1, "from": "payout period start", "notes": "12 months of satisfactory payments required", "citation": "VA Pamphlet 26-7, Ch. 4"},
+            "foreclosure": {"waiting_period_years": 2, "from": "completion date", "citation": "VA Pamphlet 26-7, Ch. 4"},
+            "short_sale": {"waiting_period_years": 2, "citation": "VA Pamphlet 26-7, Ch. 4"},
+            "deed_in_lieu": {"waiting_period_years": 2, "citation": "VA Pamphlet 26-7, Ch. 4"},
+            "repossession": {"waiting_period_years": 0, "citation": "VA Pamphlet 26-7, Ch. 4", "notes": "No specific waiting period but must show satisfactory credit re-established"},
+        },
     },
 }
 
