@@ -147,6 +147,11 @@ def build_rule_engine_context_block(question: str) -> Optional[str]:
     Run the rule engine and format its output as a context block
     that can be prepended to the RAG context for Claude.
 
+    For complex multi-topic questions, runs a FULL scenario evaluation
+    (LTV + DTI + credit score + fees for all agencies) instead of just
+    the single rule type the router picked. This ensures the LLM has
+    all deterministic data available.
+
     Returns None if the question doesn't trigger rule engine,
     otherwise returns a formatted context block string.
     """
@@ -154,12 +159,40 @@ def build_rule_engine_context_block(question: str) -> Optional[str]:
     if classification["route"] in (ROUTE_RAG,):
         return None
 
-    result = route_and_answer(question)
-    if not result.get("rule_engine_answer"):
-        return None
+    complexity = classification.get("complexity", {})
+    is_complex = complexity.get("is_complex", False)
 
-    rule_data = result["rule_engine_answer"]
-    citations = result.get("citations", [])
+    # For complex questions, run full scenario evaluation instead of
+    # single-type lookup. This covers LTV, DTI, credit, fees, etc.
+    if is_complex:
+        params = classification.get("parameters", {})
+        scenario_kwargs = {}
+        for key in ["agency", "transaction_type", "occupancy", "units",
+                     "rate_type", "credit_score", "ltv", "dti",
+                     "loan_amount", "down_payment_pct", "loan_term_years",
+                     "va_first_use", "va_disability_exempt",
+                     "underwriting_method", "state"]:
+            if key in params:
+                scenario_kwargs[key] = params[key]
+        try:
+            scenario = LoanScenario(**scenario_kwargs)
+            result = evaluate_scenario(scenario)
+            rule_data = result.to_text()
+            citations = [r.citation for results in result.results.values()
+                         for r in results if r.citation]
+        except Exception:
+            # Fallback to single lookup
+            result = route_and_answer(question)
+            if not result.get("rule_engine_answer"):
+                return None
+            rule_data = result["rule_engine_answer"]
+            citations = result.get("citations", [])
+    else:
+        result = route_and_answer(question)
+        if not result.get("rule_engine_answer"):
+            return None
+        rule_data = result["rule_engine_answer"]
+        citations = result.get("citations", [])
 
     block = [
         "╔══════════════════════════════════════════════════════════════════╗",
