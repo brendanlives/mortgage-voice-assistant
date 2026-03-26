@@ -303,11 +303,194 @@ FANNIE_MAE = {
         "multiple_financed": {"months": 2, "per": "each additional financed property", "citation": "B3-4.1-01"},
     },
 
-    # ----- BORROWER CONTRIBUTION -----
+    # ----- BORROWER CONTRIBUTION / GIFT FUNDS -----
     "borrower_contribution": {
         "ltv_lte_80_primary": {"min_own_funds": "0%", "gift_ok": True, "citation": "B3-4.3-04"},
         "ltv_gt_80_1_unit": {"min_own_funds": "3%", "gift_for_remainder": True, "citation": "B3-4.3-04"},
         "ltv_gt_80_2_4_unit": {"min_own_funds": "5%", "gift_for_remainder": True, "citation": "B3-4.3-04"},
+    },
+    "gift_funds": {
+        "eligible_donors": ["relative", "domestic partner", "fiance", "employer", "labor union", "government entity", "nonprofit"],
+        "ineligible_donors": ["interested party (seller, builder, real estate agent)", "any person with financial interest in the transaction"],
+        "documentation_required": ["gift letter (amount, donor, relationship, no repayment)", "donor bank statement showing withdrawal", "borrower bank statement showing deposit"],
+        "foreign_gifts": {
+            "allowed": True,
+            "additional_docs": ["wire transfer confirmation", "donor bank statement from foreign bank", "currency conversion documentation"],
+            "citation": "B3-4.3-04",
+        },
+        "citation": "B3-4.3-04, Gift Fund Requirements",
+    },
+
+    # ----- NON-TAXABLE INCOME GROSS-UP -----
+    "nontaxable_income_grossup": {
+        "allowed": True,
+        "default_factor": 1.25,
+        "default_pct": "25%",
+        "documentation_based_factor": "May use actual tax rate if documented with tax returns",
+        "eligible_income_types": ["Social Security", "SSDI", "VA disability compensation", "child support", "municipal bond interest", "certain retirement income", "military allowances (BAH, BAS)"],
+        "not_eligible": ["Alimony (taxable for pre-2019 divorces)"],
+        "how_to_apply": "Multiply non-taxable monthly income by 1.25 (or 1 + actual tax rate)",
+        "citation": "B3-3.1-01, General Income Information",
+        "notes": "DU automatically grosses up when non-taxable income is identified. For manual UW, lender calculates.",
+    },
+
+    # ----- ALIMONY / CHILD SUPPORT AS INCOME -----
+    "alimony_child_support_income": {
+        "alimony_as_income": {
+            "can_use": True,
+            "continuity_required": "Must continue for at least 3 years from closing",
+            "documentation": ["divorce decree or separation agreement", "court order", "12 months receipt history (bank statements or cancelled checks)"],
+            "taxable": "Taxable for divorces finalized before 1/1/2019; non-taxable after",
+            "grossup_eligible": "Only if non-taxable (post-2018 divorces)",
+            "citation": "B3-3.1-09, Alimony and Child Support",
+        },
+        "child_support_as_income": {
+            "can_use": True,
+            "continuity_required": "Must continue for at least 3 years from closing",
+            "documentation": ["divorce decree, court order, or separation agreement", "12 months receipt history"],
+            "non_taxable": True,
+            "grossup_eligible": True,
+            "citation": "B3-3.1-09",
+        },
+        "alimony_as_liability": {
+            "always_included_in_dti": True,
+            "documentation": "Court order or divorce decree amount",
+            "citation": "B3-6-05, Monthly Debt Obligations",
+        },
+    },
+
+    # ----- EMPLOYMENT / INCOME TYPE RULES -----
+    "income_rules": {
+        "employment_history": {
+            "standard_requirement": "2 years continuous employment history",
+            "gaps_allowed": "Yes, if explained with LOE (Letter of Explanation)",
+            "exceptions": ["recent college graduates (transcript + offer letter)", "military personnel transitioning to civilian", "seasonal workers with 2-year history"],
+            "citation": "B3-3.1-01, General Income Requirements",
+        },
+        "commission_income": {
+            "requirement": "2 years history of commission earnings",
+            "calculation_stable_or_increasing": "Use 2-year average",
+            "calculation_declining": "Use most recent year (lower amount)",
+            "if_less_than_25pct_of_total": "Not considered variable; no 2-year history needed",
+            "documentation": ["2 years W-2s", "2 years tax returns (if >25% commission)", "most recent paystub"],
+            "citation": "B3-3.1-05, Commission Income",
+        },
+        "self_employment_income": {
+            "requirement": "2 years history required (1 year acceptable if prior related employment)",
+            "calculation": "Use Form 1084/1088 (Fannie) to compute net income from tax returns",
+            "declining_income": "If year-over-year decline, use most recent year's lower income",
+            "schedule_c_add_backs": ["depreciation", "depletion", "amortization", "business use of home", "meals/entertainment (non-deductible portion)"],
+            "schedule_e_add_backs": ["depreciation", "amortization", "insurance", "taxes (if already in PITIA)"],
+            "form_used": "Form 1084 (Cash Flow Analysis) or Form 1088 (Comparative Income Analysis)",
+            "citation": "B3-3.2-01, Self-Employment Income; B3-3.2-02, Tax Return Analysis",
+        },
+        "rental_income_from_subject": {
+            "can_use": True,
+            "factor": 0.75,
+            "formula": "75% of gross monthly rent minus full PITIA = net rental income",
+            "documentation": ["current lease agreements OR", "Fannie Mae Form 1025 (Small Residential Income Property Appraisal)"],
+            "owner_occupied_multi_unit": "Can use rental income from non-owner-occupied units",
+            "investment_property": "Can use rental income from all units",
+            "citation": "B3-3.1-08, Rental Income",
+        },
+        "rental_income_existing_properties": {
+            "factor": 0.75,
+            "formula": "75% of gross rent per Schedule E or lease - PITIA = net rental income",
+            "negative_cash_flow": "Net loss is added to monthly obligations (increases DTI)",
+            "documentation": ["Schedule E from tax returns (2-year history)", "current lease agreements"],
+            "citation": "B3-3.1-08, Rental Income",
+        },
+        "departure_residence": {
+            "definition": "Current primary residence being vacated/converted to rental",
+            "rental_income_allowed": True,
+            "requirements": ["executed lease agreement for the departure property", "evidence of security deposit"],
+            "factor": 0.75,
+            "formula": "75% of gross rent minus full PITIA on departure residence",
+            "if_no_lease": "Full PITIA of departure residence counted as liability with zero rental offset",
+            "citation": "B3-3.1-08, Rental Income; B3-6-06, Qualifying Impact of Other Real Estate Owned",
+        },
+        "asset_depletion_income": {
+            "allowed": True,
+            "eligible_assets": ["checking/savings", "stocks/bonds/mutual funds (use 70% of value)", "retirement accounts (use 70% if under 59.5, 100% if over)", "trust accounts"],
+            "ineligible_assets": ["business assets", "stock options/restricted stock", "non-vested RSUs", "529 education accounts"],
+            "formula": "(Eligible assets - down payment - closing costs) / remaining loan term in months",
+            "loan_term_divisor": "Use actual loan term (e.g., 360 for 30-year, 240 for 20-year)",
+            "age_restriction": "Borrower must be at least 62 for DU to accept (no age restriction for manual UW if asset ownership documented)",
+            "citation": "B3-3.1-09, Other Income; B3-4.3-19, Asset Depletion",
+        },
+        "social_security_income": {
+            "can_use": True,
+            "non_taxable": True,
+            "grossup_eligible": True,
+            "documentation": ["SSA award letter or benefit verification letter", "most recent bank statement showing deposit"],
+            "continuity": "Assumed to continue (no expiration for retirement/SSDI)",
+            "citation": "B3-3.1-09, Other Income",
+        },
+        "pension_retirement_income": {
+            "can_use": True,
+            "documentation": ["pension/retirement award letter", "1099-R", "bank statements showing deposits"],
+            "continuity": "Assumed to continue if no expiration date",
+            "grossup_eligible": "If non-taxable portion documented",
+            "citation": "B3-3.1-01, General Income; B3-3.1-09, Other Income",
+        },
+        "va_disability_income": {
+            "can_use": True,
+            "non_taxable": True,
+            "grossup_eligible": True,
+            "grossup_factor": 1.25,
+            "documentation": ["VA benefit letter or award letter", "bank statements"],
+            "continuity": "Assumed to continue (permanent disability)",
+            "citation": "B3-3.1-09, Other Income",
+        },
+        "boarder_income": {
+            "homeready_only": True,
+            "max_percentage_of_income": "30% of total qualifying income",
+            "documentation": ["12 months history of shared residency (e.g., utility bills, drivers license)", "documentation of boarder payments"],
+            "not_available_for": "Standard conventional, FHA, VA",
+            "citation": "B5-6-02, HomeReady; B3-3.1-09",
+        },
+    },
+
+    # ----- COLLECTIONS / CHARGE-OFFS -----
+    "collections_chargeoffs": {
+        "medical_collections": {
+            "excluded_from_dti": True,
+            "no_payoff_required": True,
+            "citation": "B3-5.3-08, Collections and Charge-Offs",
+        },
+        "non_medical_collections": {
+            "excluded_from_dti": True,
+            "notes": "DU does not require payoff of collections. Manual UW may require explanation.",
+            "citation": "B3-5.3-08",
+        },
+        "charge_offs": {
+            "excluded_from_dti": True,
+            "notes": "Charge-offs do not need to be paid off for DU. For manual UW, lender discretion.",
+            "citation": "B3-5.3-08",
+        },
+    },
+
+    # ----- LOAN MODIFICATION SEASONING -----
+    "loan_modification_seasoning": {
+        "standard": {
+            "waiting_period_months": 12,
+            "payments_required": 12,
+            "from": "effective date of modification",
+            "applies_to": "Rate-term and cash-out refinance of a modified loan",
+            "citation": "B2-1.3-05, Refinance of Modified Mortgage",
+        },
+    },
+
+    # ----- NON-OCCUPANT CO-BORROWER -----
+    "non_occupant_coborrower": {
+        "allowed": True,
+        "max_ltv_1_unit": 97,
+        "max_ltv_2_unit": 85,
+        "max_ltv_investment": "Not applicable (non-occ co-borrower only for primary)",
+        "income_can_be_used": True,
+        "must_be_on_title": True,
+        "relationship_requirement": "None (any individual)",
+        "citation": "B2-2-04, Non-Occupant Borrowers",
     },
 
     # ----- LOAN LIMITS (2024 baseline, update annually) -----
@@ -550,6 +733,132 @@ FREDDIE_MAC = {
             "repossession": {"waiting_period_years": 4, "citation": "Section 5202.3"},
         },
     },
+
+    # ----- GIFT FUNDS -----
+    "gift_funds": {
+        "eligible_donors": ["relative", "domestic partner", "employer", "government entity", "nonprofit"],
+        "documentation_required": ["gift letter", "donor bank statement", "borrower bank statement showing deposit"],
+        "foreign_gifts": {"allowed": True, "additional_docs": ["wire transfer", "foreign bank statement", "currency conversion docs"]},
+        "citation": "Section 5501.2, Gift Funds",
+    },
+
+    # ----- NON-TAXABLE INCOME GROSS-UP -----
+    "nontaxable_income_grossup": {
+        "allowed": True,
+        "default_factor": 1.25,
+        "default_pct": "25%",
+        "eligible_income_types": ["Social Security", "SSDI", "VA disability", "child support", "military allowances"],
+        "citation": "Section 5301.1, Income Requirements",
+    },
+
+    # ----- ALIMONY / CHILD SUPPORT -----
+    "alimony_child_support_income": {
+        "alimony_as_income": {
+            "can_use": True,
+            "continuity_required": "Must continue for at least 3 years from closing",
+            "documentation": ["divorce decree/court order", "12 months receipt history"],
+            "citation": "Section 5301.1, Income Assessment",
+        },
+        "child_support_as_income": {
+            "can_use": True,
+            "continuity_required": "3 years from closing",
+            "non_taxable": True,
+            "grossup_eligible": True,
+            "citation": "Section 5301.1",
+        },
+        "alimony_as_liability": {"always_included_in_dti": True, "citation": "Section 5501.1"},
+    },
+
+    # ----- INCOME TYPE RULES -----
+    "income_rules": {
+        "employment_history": {
+            "standard_requirement": "2 years continuous employment",
+            "gaps_allowed": "Yes, with LOE",
+            "citation": "Section 5301.1",
+        },
+        "commission_income": {
+            "requirement": "2 years history",
+            "calculation_stable_or_increasing": "2-year average",
+            "calculation_declining": "Use most recent year (lower)",
+            "citation": "Section 5302.2, Variable Income",
+        },
+        "self_employment_income": {
+            "requirement": "2 years (1 year with prior related employment)",
+            "calculation": "Use Form 91 (Income Analysis) from tax returns",
+            "declining_income": "Use most recent year if declining",
+            "schedule_c_add_backs": ["depreciation", "depletion", "amortization", "business use of home"],
+            "schedule_e_add_backs": ["depreciation", "amortization"],
+            "form_used": "Freddie Mac Form 91 (Income Analysis)",
+            "citation": "Section 5302.1, Self-Employment Income",
+        },
+        "rental_income_from_subject": {
+            "can_use": True,
+            "factor": 0.75,
+            "formula": "75% of gross rent minus full PITIA = net rental income",
+            "documentation": ["current lease agreements", "Form 72 (Appraisal)"],
+            "citation": "Section 5306.1, Rental Income",
+        },
+        "rental_income_existing_properties": {
+            "factor": 0.75,
+            "formula": "75% of gross rent per Schedule E - PITIA = net rental income",
+            "negative_cash_flow": "Net loss added to monthly obligations",
+            "citation": "Section 5306.1",
+        },
+        "departure_residence": {
+            "rental_income_allowed": True,
+            "requirements": ["executed lease agreement", "evidence of security deposit"],
+            "factor": 0.75,
+            "formula": "75% of gross rent minus full PITIA",
+            "if_no_lease": "Full PITIA counted as liability with zero offset",
+            "citation": "Section 5306.1; Section 5501.1",
+        },
+        "asset_depletion_income": {
+            "allowed": True,
+            "eligible_assets": ["checking/savings", "stocks/bonds (use 70%)", "retirement (70% if under 59.5, 100% if over)"],
+            "formula": "(Eligible assets - down payment - closing costs) / remaining loan term months",
+            "citation": "Section 5305.1, Asset Income",
+        },
+        "social_security_income": {
+            "can_use": True, "non_taxable": True, "grossup_eligible": True,
+            "documentation": ["SSA award letter", "bank statement"],
+            "citation": "Section 5301.1",
+        },
+        "pension_retirement_income": {
+            "can_use": True,
+            "documentation": ["award letter", "1099-R", "bank statements"],
+            "citation": "Section 5301.1",
+        },
+        "va_disability_income": {
+            "can_use": True, "non_taxable": True, "grossup_eligible": True, "grossup_factor": 1.25,
+            "citation": "Section 5301.1",
+        },
+    },
+
+    # ----- COLLECTIONS / CHARGE-OFFS -----
+    "collections_chargeoffs": {
+        "medical_collections": {"excluded_from_dti": True, "no_payoff_required": True, "citation": "Section 5202.1"},
+        "non_medical_collections": {"excluded_from_dti": True, "notes": "LPA does not require payoff", "citation": "Section 5202.1"},
+        "charge_offs": {"excluded_from_dti": True, "citation": "Section 5202.1"},
+    },
+
+    # ----- LOAN MODIFICATION SEASONING -----
+    "loan_modification_seasoning": {
+        "standard": {
+            "waiting_period_months": 12,
+            "payments_required": 6,
+            "from": "effective date of modification",
+            "citation": "Section 4301.2, Refinance Transactions",
+        },
+    },
+
+    # ----- NON-OCCUPANT CO-BORROWER -----
+    "non_occupant_coborrower": {
+        "allowed": True,
+        "max_ltv_1_unit": 95,
+        "max_ltv_2_unit": 85,
+        "income_can_be_used": True,
+        "citation": "Section 4201.17, Non-Occupant Borrowers",
+    },
 }
 
 
@@ -789,6 +1098,144 @@ FHA = {
             "repossession": {"waiting_period_years": 0, "citation": "HUD 4000.1, II.A.4.a", "notes": "FHA does not have a specific waiting period for repossession, but it must be addressed in LOE and credit analysis"},
         },
     },
+
+    # ----- GIFT FUNDS -----
+    "gift_funds": {
+        "eligible_donors": ["family member", "employer", "labor union", "close friend (with LOE)", "government agency", "nonprofit"],
+        "min_borrower_own_funds": "None for FHA — 100% of down payment can be gift",
+        "interested_party_contributions": {
+            "ltv_gt_90": {"max_pct": 6, "citation": "HUD 4000.1, II.A.4.d.iii"},
+            "ltv_lte_90": {"max_pct": 6, "citation": "HUD 4000.1, II.A.4.d.iii"},
+        },
+        "documentation_required": ["gift letter", "donor bank statement", "transfer evidence"],
+        "foreign_gifts": {"allowed": True, "additional_docs": ["wire transfer", "foreign bank statement", "currency conversion"]},
+        "citation": "HUD 4000.1, II.A.4.d.iii, Gift Funds",
+    },
+
+    # ----- NON-TAXABLE INCOME GROSS-UP -----
+    "nontaxable_income_grossup": {
+        "allowed": True,
+        "default_factor": 1.25,
+        "default_pct": "25%",
+        "eligible_income_types": ["Social Security", "SSDI", "VA disability", "child support", "military allowances", "certain pension income"],
+        "citation": "HUD 4000.1, II.A.4.c.i(B), Income Adjustments",
+    },
+
+    # ----- ALIMONY / CHILD SUPPORT -----
+    "alimony_child_support_income": {
+        "alimony_as_income": {
+            "can_use": True,
+            "continuity_required": "Must continue for at least 3 years from closing",
+            "documentation": ["divorce decree", "court order", "12 months receipt history"],
+            "citation": "HUD 4000.1, II.A.4.c.ii(D), Alimony",
+        },
+        "child_support_as_income": {
+            "can_use": True,
+            "continuity_required": "3 years from closing",
+            "non_taxable": True,
+            "grossup_eligible": True,
+            "citation": "HUD 4000.1, II.A.4.c.ii(D)",
+        },
+        "alimony_as_liability": {"always_included_in_dti": True, "citation": "HUD 4000.1, II.A.4.c.ii"},
+    },
+
+    # ----- INCOME TYPE RULES -----
+    "income_rules": {
+        "employment_history": {
+            "standard_requirement": "2 years continuous employment",
+            "gaps_allowed": "Yes, with LOE; gaps > 6 months require re-establishment of employment for 6+ months",
+            "citation": "HUD 4000.1, II.A.4.c.i, Employment Requirements",
+        },
+        "commission_income": {
+            "requirement": "2 years history",
+            "calculation_stable_or_increasing": "2-year average",
+            "calculation_declining": "Use most recent year",
+            "citation": "HUD 4000.1, II.A.4.c.i(F), Commission Income",
+        },
+        "self_employment_income": {
+            "requirement": "2 years (1 year with strong compensating factors)",
+            "calculation": "Net income from tax returns after add-backs",
+            "declining_income": "Use most recent year if declining",
+            "schedule_c_add_backs": ["depreciation", "depletion", "amortization", "business use of home"],
+            "schedule_e_add_backs": ["depreciation", "amortization"],
+            "citation": "HUD 4000.1, II.A.4.c.i(G), Self-Employment Income",
+        },
+        "rental_income_from_subject": {
+            "can_use": True,
+            "factor": 0.75,
+            "formula": "75% of gross monthly rent minus PITIA = net rental income for qualifying",
+            "self_sufficiency_test": {
+                "applies_to": "3-4 unit properties",
+                "formula": "Monthly PITIA must not exceed 75% of total gross rental income from ALL units (including borrower's unit at market rent)",
+                "citation": "HUD 4000.1, II.A.8.d, Self-Sufficiency Rental Income",
+            },
+            "documentation": ["current lease agreements", "appraisal with rental survey"],
+            "citation": "HUD 4000.1, II.A.4.c.ii(H), Rental Income",
+        },
+        "departure_residence": {
+            "rental_income_allowed": True,
+            "requirements": ["executed lease agreement", "security deposit evidence"],
+            "factor": 0.75,
+            "formula": "75% of gross rent minus full PITIA",
+            "if_no_lease": "Full PITIA counted as liability",
+            "citation": "HUD 4000.1, II.A.4.c.ii(H)",
+        },
+        "asset_depletion_income": {
+            "allowed": False,
+            "notes": "FHA does NOT allow asset depletion as qualifying income",
+            "citation": "HUD 4000.1, II.A.4.c",
+        },
+        "social_security_income": {
+            "can_use": True, "non_taxable": True, "grossup_eligible": True,
+            "documentation": ["SSA award letter", "bank statements"],
+            "citation": "HUD 4000.1, II.A.4.c.ii(C)",
+        },
+        "pension_retirement_income": {
+            "can_use": True,
+            "documentation": ["award letter", "1099-R", "bank statements"],
+            "citation": "HUD 4000.1, II.A.4.c.ii(C)",
+        },
+    },
+
+    # ----- COLLECTIONS / CHARGE-OFFS -----
+    "collections_chargeoffs": {
+        "medical_collections": {
+            "excluded_from_dti": True,
+            "no_payoff_required": True,
+            "no_amount_limit": True,
+            "citation": "HUD 4000.1, II.A.4.a.iv(F), Medical Collections",
+        },
+        "non_medical_collections": {
+            "cumulative_threshold": 2000,
+            "if_over_threshold": "Must pay off OR establish payment plan (5% of balance/month added to DTI)",
+            "if_under_threshold": "No payoff or payment plan required",
+            "citation": "HUD 4000.1, II.A.4.a.iv(F), Collections/Charge-Offs",
+        },
+        "charge_offs": {
+            "cumulative_threshold": 2000,
+            "same_as_collections": True,
+            "citation": "HUD 4000.1, II.A.4.a.iv(F)",
+        },
+        "disputed_accounts": {
+            "if_over_1000": "Must provide LOE; may affect TOTAL Scorecard",
+            "citation": "HUD 4000.1, II.A.4.a.iv(F)",
+        },
+    },
+
+    # ----- NON-OCCUPANT CO-BORROWER -----
+    "non_occupant_coborrower": {
+        "allowed": True,
+        "max_ltv_1_unit_family": 96.5,
+        "max_ltv_1_unit_non_family": 75,
+        "max_ltv_2_4_unit": 75,
+        "relationship_for_high_ltv": "Family member only for 96.5% LTV",
+        "identity_of_interest": {
+            "max_ltv": 85,
+            "exceptions": ["family member purchasing primary residence", "tenant purchasing unit they rent"],
+            "citation": "HUD 4000.1, II.A.2.a",
+        },
+        "citation": "HUD 4000.1, II.A.2.a, Non-Occupying Borrower",
+    },
 }
 
 
@@ -1000,6 +1447,337 @@ VA = {
             "repossession": {"waiting_period_years": 0, "citation": "VA Pamphlet 26-7, Ch. 4", "notes": "No specific waiting period but must show satisfactory credit re-established"},
         },
     },
+
+    # ----- NON-TAXABLE INCOME GROSS-UP -----
+    "nontaxable_income_grossup": {
+        "allowed": True,
+        "default_factor": 1.25,
+        "default_pct": "25%",
+        "eligible_income_types": ["VA disability compensation", "Social Security", "SSDI", "child support", "military allowances (BAH, BAS)", "combat pay"],
+        "citation": "VA Pamphlet 26-7, Ch. 4, Section 3",
+    },
+
+    # ----- ALIMONY / CHILD SUPPORT -----
+    "alimony_child_support_income": {
+        "alimony_as_income": {
+            "can_use": True,
+            "continuity_required": "Must be received for 12 months and likely to continue",
+            "documentation": ["divorce decree/court order", "12 months receipt history"],
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+        "child_support_as_income": {
+            "can_use": True,
+            "continuity_required": "Likely to continue for at least 3 years",
+            "non_taxable": True,
+            "grossup_eligible": True,
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+        "alimony_as_liability": {"always_included_in_dti": True, "citation": "VA Pamphlet 26-7, Ch. 4"},
+    },
+
+    # ----- INCOME TYPE RULES -----
+    "income_rules": {
+        "employment_history": {
+            "standard_requirement": "2 years (flexible for military-to-civilian transitions)",
+            "military_transition": "Service members transitioning to civilian jobs: military service counts toward employment history",
+            "citation": "VA Pamphlet 26-7, Ch. 4, Section 2",
+        },
+        "commission_income": {
+            "requirement": "2 years history",
+            "calculation_stable_or_increasing": "2-year average",
+            "calculation_declining": "Use most recent year (lower)",
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+        "self_employment_income": {
+            "requirement": "2 years",
+            "calculation": "Net income from tax returns with add-backs",
+            "declining_income": "Use most recent year if declining",
+            "schedule_c_add_backs": ["depreciation", "depletion", "amortization"],
+            "schedule_e_add_backs": ["depreciation", "amortization"],
+            "citation": "VA Pamphlet 26-7, Ch. 4, Section 7",
+        },
+        "rental_income_from_subject": {
+            "can_use": True,
+            "factor": 0.75,
+            "formula": "75% of gross rent minus PITIA = net rental income",
+            "documentation": ["current lease agreements", "appraisal"],
+            "citation": "VA Pamphlet 26-7, Ch. 4, Section 8",
+        },
+        "departure_residence": {
+            "rental_income_allowed": True,
+            "requirements": ["executed lease", "security deposit evidence"],
+            "factor": 0.75,
+            "formula": "75% of gross rent minus full PITIA",
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+        "military_income": {
+            "base_pay": {"can_use": True, "documentation": "LES (Leave and Earnings Statement)"},
+            "bah": {"can_use": True, "non_taxable": True, "grossup_eligible": True},
+            "bas": {"can_use": True, "non_taxable": True, "grossup_eligible": True},
+            "combat_pay": {"can_use": True, "non_taxable": True, "grossup_eligible": True, "must_be_likely_to_continue": True},
+            "flight_pay": {"can_use": True},
+            "hazard_pay": {"can_use": True},
+            "citation": "VA Pamphlet 26-7, Ch. 4, Section 2",
+        },
+        "va_disability_income": {
+            "can_use": True,
+            "non_taxable": True,
+            "grossup_eligible": True,
+            "grossup_factor": 1.25,
+            "documentation": ["VA benefit/award letter", "bank statements"],
+            "also_exempts_funding_fee": True,
+            "citation": "VA Pamphlet 26-7, Ch. 4; Ch. 8 (Funding Fee Exemption)",
+        },
+        "social_security_income": {
+            "can_use": True, "non_taxable": True, "grossup_eligible": True,
+            "documentation": ["SSA award letter", "bank statements"],
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+        "pension_retirement_income": {
+            "can_use": True,
+            "documentation": ["award letter", "1099-R", "bank statements"],
+            "military_retirement": {
+                "can_use": True,
+                "documentation": "Retiree Account Statement (RAS) or DD-214 + retirement order",
+                "concurrent_receipt": "Veterans may receive both military retirement and VA disability simultaneously",
+            },
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+        "asset_depletion_income": {
+            "allowed": False,
+            "notes": "VA does NOT recognize asset depletion as qualifying income",
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+    },
+
+    # ----- COLLECTIONS / CHARGE-OFFS -----
+    "collections_chargeoffs": {
+        "medical_collections": {"excluded_from_dti": True, "citation": "VA Pamphlet 26-7, Ch. 4"},
+        "non_medical_collections": {
+            "not_required_to_payoff": True,
+            "notes": "VA does not require payoff of collections, but lender must comment on overall credit pattern",
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+        "charge_offs": {"not_required_to_payoff": True, "citation": "VA Pamphlet 26-7, Ch. 4"},
+    },
+
+    # ----- COMMUNITY PROPERTY / NON-BORROWING SPOUSE -----
+    "non_borrowing_spouse": {
+        "community_property_states": {
+            "applies_when": "Veteran is married and spouse is NOT on the loan, in a community property state",
+            "spouse_debts_in_dti": True,
+            "spouse_credit_score_used": False,
+            "spouse_income_cannot_be_used": "Unless spouse is on the loan",
+            "citation": "VA Pamphlet 26-7, Ch. 4, Section 5",
+            "notes": "In community property states, all of the non-borrowing spouse's debts must be included in the veteran's DTI, but the spouse's credit score is NOT used for qualifying.",
+        },
+        "non_community_property_states": {
+            "spouse_debts_in_dti": False,
+            "citation": "VA Pamphlet 26-7, Ch. 4",
+        },
+    },
+
+    # ----- NON-OCCUPANT CO-BORROWER -----
+    "non_occupant_coborrower": {
+        "allowed": "Only spouse or another eligible veteran",
+        "civilian_non_occupant": "Not allowed on VA loans",
+        "citation": "VA Pamphlet 26-7, Ch. 3",
+    },
+}
+
+
+# =============================================================================
+# CROSS-AGENCY DETERMINISTIC RULES
+# =============================================================================
+
+# Community property states — affects DTI for married borrowers
+COMMUNITY_PROPERTY_STATES = {
+    "states": ["AZ", "CA", "ID", "LA", "NV", "NM", "TX", "WA", "WI"],
+    "state_names": ["Arizona", "California", "Idaho", "Louisiana", "Nevada", "New Mexico", "Texas", "Washington", "Wisconsin"],
+    "rule": "In community property states, debts of non-borrowing spouse MUST be included in DTI calculation even if spouse is not on the loan",
+    "credit_score_impact": "Non-borrowing spouse's credit score is NOT used for qualifying (VA, FHA). Conventional may pull spouse credit for community property debt verification.",
+    "applies_to": {
+        "VA": "All community property state debts included in DTI; spouse credit not used",
+        "FHA": "Non-borrowing spouse debts included; credit report pulled but score not used for qualifying",
+        "Fannie Mae": "Non-borrowing spouse debts may need to be included; depends on state law and title",
+        "Freddie Mac": "Same as Fannie Mae",
+    },
+    "citation": "VA Pamphlet 26-7, Ch. 4; HUD 4000.1, II.A.4; Fannie Mae B2-2-04",
+}
+
+# Non-taxable income gross-up — universal across all agencies
+NONTAXABLE_GROSSUP = {
+    "universal_factor": 1.25,
+    "universal_pct": "25%",
+    "rule": "Non-taxable income may be grossed up by 25% (or actual tax rate if documented) to account for the borrower not paying taxes on that income",
+    "eligible_types": [
+        "Social Security (retirement, survivor)",
+        "SSDI (Social Security Disability)",
+        "VA disability compensation",
+        "Child support (always non-taxable)",
+        "Alimony (non-taxable for divorces finalized after 12/31/2018)",
+        "Military allowances (BAH, BAS, combat pay)",
+        "Municipal bond interest",
+        "Certain pension/retirement income (non-taxable portion)",
+    ],
+    "not_eligible": [
+        "W-2 employment income",
+        "Self-employment income",
+        "Rental income",
+        "Commission income",
+        "Alimony from pre-2019 divorces (taxable)",
+    ],
+    "citation": "Fannie B3-3.1-01; Freddie Section 5301.1; HUD 4000.1 II.A.4.c.i(B); VA Pamphlet 26-7 Ch.4",
+}
+
+# Asset depletion eligibility by agency
+ASSET_DEPLETION_RULES = {
+    "Fannie Mae": {
+        "allowed": True,
+        "formula": "(Eligible assets - down payment - closing costs) / remaining loan term months",
+        "eligible_assets": ["checking/savings (100%)", "stocks/bonds/mutual funds (70% of value)", "retirement accounts (70% if under 59.5, 100% if over 59.5)", "vested stock options"],
+        "ineligible_assets": ["business assets", "non-vested RSUs", "529 plans", "life insurance cash value (unless documented)"],
+        "age_note": "DU may require borrower be at least 62; manual UW has no age requirement",
+        "citation": "B3-3.1-09; B3-4.3-19",
+    },
+    "Freddie Mac": {
+        "allowed": True,
+        "formula": "(Eligible assets - down payment - closing costs) / remaining loan term months",
+        "eligible_assets": ["checking/savings (100%)", "stocks/bonds (70%)", "retirement (70% if under 59.5, 100% if over)"],
+        "citation": "Section 5305.1",
+    },
+    "FHA": {
+        "allowed": False,
+        "notes": "FHA does NOT allow asset depletion as qualifying income",
+        "citation": "HUD 4000.1, II.A.4.c",
+    },
+    "VA": {
+        "allowed": False,
+        "notes": "VA does NOT recognize asset depletion as qualifying income",
+        "citation": "VA Pamphlet 26-7, Ch. 4",
+    },
+}
+
+# Rental income factors — universal
+RENTAL_INCOME_RULES = {
+    "vacancy_factor": 0.75,
+    "vacancy_pct": "25%",
+    "rule": "All agencies use 75% of gross rent (25% vacancy/maintenance factor) for qualifying",
+    "formula": "75% of gross monthly rent - PITIA = net rental income (or loss)",
+    "negative_result": "If net is negative, the loss is added to borrower's monthly obligations (increases DTI)",
+    "subject_property": {
+        "owner_occupied_multi_unit": "Can use rental income from units borrower does NOT occupy",
+        "investment_property": "Can use projected rent from all units",
+        "documentation": ["current lease agreements", "appraisal with rental survey (Form 1025 Fannie, Form 72 Freddie)"],
+    },
+    "existing_rental_properties": {
+        "documentation": ["Schedule E (2-year tax return history)", "current lease agreements"],
+        "depreciation_add_back": True,
+        "notes": "Depreciation from Schedule E is added back to rental income (non-cash expense)",
+    },
+    "departure_residence": {
+        "rule": "Primary residence being vacated can be counted as rental IF executed lease is provided",
+        "with_lease": "75% of gross rent minus PITIA = net rental offset",
+        "without_lease": "Full PITIA counted as liability with ZERO rental income offset",
+    },
+    "fha_self_sufficiency": {
+        "applies_to": "FHA 3-4 unit properties",
+        "test": "Total PITIA must not exceed 75% of total gross rental income from ALL units (including borrower's at market rent)",
+        "citation": "HUD 4000.1, II.A.8.d",
+    },
+    "citation": "Fannie B3-3.1-08; Freddie Section 5306.1; HUD 4000.1 II.A.4.c.ii(H); VA Pamphlet 26-7 Ch.4",
+}
+
+# Collections & charge-offs treatment by agency
+COLLECTIONS_RULES = {
+    "Fannie Mae": {
+        "medical_collections": "Excluded from DTI, no payoff required",
+        "non_medical_collections": "Excluded from DTI for DU; manual UW at lender discretion",
+        "charge_offs": "Excluded from DTI for DU",
+        "citation": "B3-5.3-08",
+    },
+    "Freddie Mac": {
+        "medical_collections": "Excluded from DTI, no payoff required",
+        "non_medical_collections": "Excluded from DTI for LPA",
+        "charge_offs": "Excluded from DTI for LPA",
+        "citation": "Section 5202.1",
+    },
+    "FHA": {
+        "medical_collections": "Excluded from DTI regardless of amount",
+        "non_medical_collections": "If cumulative balance >$2,000: must pay off or set up payment plan (5% of balance/month counted in DTI)",
+        "non_medical_under_2000": "No payoff or payment plan required",
+        "charge_offs": "Same $2,000 cumulative rule as collections",
+        "disputed_accounts_over_1000": "Must provide LOE; may affect TOTAL Scorecard",
+        "citation": "HUD 4000.1, II.A.4.a.iv(F)",
+    },
+    "VA": {
+        "medical_collections": "Excluded from DTI",
+        "non_medical_collections": "No payoff required; lender analyzes overall credit pattern",
+        "charge_offs": "No payoff required",
+        "citation": "VA Pamphlet 26-7, Ch. 4",
+    },
+}
+
+# Self-employment depreciation add-backs
+DEPRECIATION_ADDBACK_RULES = {
+    "rule": "Depreciation, depletion, and amortization are non-cash expenses and are ADDED BACK to qualifying income for self-employed borrowers",
+    "applies_to": ["Schedule C (sole proprietor)", "Schedule E (rental properties)", "K-1 (S-Corp, Partnership)"],
+    "common_add_backs": {
+        "depreciation": "Always added back (non-cash)",
+        "depletion": "Always added back (non-cash)",
+        "amortization": "Always added back (non-cash/casualty loss)",
+        "business_use_of_home": "Added back (already accounted for in housing expense)",
+        "meals_entertainment": "Non-deductible portion may be added back",
+    },
+    "forms": {
+        "Fannie Mae": "Form 1084 (Cash Flow Analysis) or Form 1088",
+        "Freddie Mac": "Form 91 (Income Analysis)",
+        "FHA": "Direct calculation from tax returns",
+        "VA": "Direct calculation from tax returns",
+    },
+    "citation": "Fannie B3-3.2-01/B3-3.2-02; Freddie Section 5302.1; HUD 4000.1 II.A.4.c.i(G); VA Pamphlet 26-7 Ch.4 Sec.7",
+}
+
+# Loan modification seasoning by agency
+LOAN_MODIFICATION_SEASONING = {
+    "Fannie Mae": {
+        "waiting_period_months": 12,
+        "payments_required": 12,
+        "from": "effective date of modification",
+        "citation": "B2-1.3-05",
+    },
+    "Freddie Mac": {
+        "waiting_period_months": 12,
+        "payments_required": 6,
+        "from": "effective date of modification",
+        "citation": "Section 4301.2",
+    },
+    "FHA": {
+        "waiting_period_months": 12,
+        "payments_required": 12,
+        "from": "effective date of modification",
+        "notes": "For FHA streamline, 210 days + 6 payments from modification",
+        "citation": "HUD 4000.1, II.A.2",
+    },
+    "VA": {
+        "waiting_period_months": 6,
+        "payments_required": 6,
+        "from": "effective date of modification",
+        "citation": "VA Pamphlet 26-7, Ch. 6",
+    },
+}
+
+# Multiple borrower qualifying credit score methodology
+QUALIFYING_CREDIT_SCORE = {
+    "rule": "When multiple borrowers, the LOWEST representative score among all borrowers is the qualifying score",
+    "single_borrower_two_scores": "Use the lower of the two scores",
+    "single_borrower_three_scores": "Use the middle score",
+    "multiple_borrowers": "Calculate each borrower's representative score first, then use the LOWEST among all borrowers",
+    "exceptions": {
+        "VA": "VA has no minimum credit score requirement (lender overlay only). Non-borrowing spouse score is NOT used.",
+        "FHA_non_borrowing_spouse": "Non-borrowing spouse credit is pulled in community property states but their score is NOT the qualifying score",
+    },
+    "citation": "Fannie B3-5.1-01; Freddie Section 5201.1; HUD 4000.1 II.A.2.a; VA Pamphlet 26-7 Ch.4",
 }
 
 
