@@ -19,7 +19,7 @@ Voice flow:
   7. Wrong? One tap/word logs the correction
 """
 
-import os, json, io, base64, datetime, hashlib
+import os, sys, json, io, base64, datetime, hashlib
 import anthropic
 import requests
 from openai import OpenAI
@@ -27,6 +27,21 @@ from pinecone import Pinecone
 from flask import Flask, request, Response, jsonify, render_template_string, send_file
 from flask_cors import CORS
 from twilio.twiml.voice_response import VoiceResponse, Gather
+
+# ── HYBRID RULE ENGINE ─────────────────────────────────────────────────────────
+# Import the deterministic rule engine for instant, citation-backed answers
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'mortgage_engine'))
+from mortgage_engine.router import classify_query, route_and_answer, extract_parameters
+from mortgage_engine.hybrid_integration import (
+    hybrid_pipeline, hybrid_stream_preprocess,
+    inject_rule_context_into_rag, build_rule_engine_context_block,
+    format_rule_answer_for_voice, format_rule_answer_for_web,
+    get_hybrid_system_prompt_addition,
+)
+from mortgage_engine.rule_engine import (
+    LoanScenario, evaluate_scenario, compare_agencies,
+    lookup_ltv, lookup_dti, lookup_credit_score,
+)
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": [
@@ -196,16 +211,14 @@ A loan officer described this scenario:
 {history_context}{conversation_text}
 
 Extract the key underwriting concepts and write a precise search query that will find
-the correct mortgage guideline from Fannie Mae, Freddie Mac, FHA (HUD Handbook 4000.1), and/or VA (VA Pamphlet 26-7).
+the correct mortgage guideline from Fannie Mae, Freddie Mac, and/or FHA (HUD Handbook 4000.1).
 Focus on: loan type, borrower characteristics, property type, occupancy, LTV, DTI, credit score,
 income type, asset type, agency-specific requirements — whatever is most relevant to the question.
 
-If the loan officer asks about a specific agency (Fannie Mae, Freddie Mac, FHA, or VA), include the
+If the loan officer asks about a specific agency (Fannie Mae, Freddie Mac, or FHA), include the
 agency name in your query. If they ask about differences between agencies, include all relevant names.
 If the question involves FHA-specific programs (203k, streamline, MIP, TOTAL scorecard, etc.),
 include "FHA" and the program name in your query.
-If the question involves VA-specific concepts (entitlement, funding fee, IRRRL, COE, residual income,
-NOV, MPR, joint loan with non-veteran, etc.), include "VA" and the relevant term in your query.
 
 Return ONLY the optimized search query. Nothing else. No explanation."""
         }]
@@ -220,7 +233,7 @@ def generate_answer(question: str, chunks: list, for_voice: bool = False, conver
         return "Claude API not configured."
 
     if not chunks:
-        msg = "I don't have a guideline that covers that specific scenario. Please verify directly with the Fannie Mae Selling Guide, Freddie Mac Seller/Servicer Guide, FHA Handbook 4000.1, or VA Pamphlet 26-7, or check with your underwriter."
+        msg = "I don't have a guideline that covers that specific scenario. Please verify directly with the Fannie Mae Selling Guide, Freddie Mac Seller/Servicer Guide, or FHA Handbook 4000.1, or check with your underwriter."
         return msg
 
     context = build_context(chunks)
@@ -239,9 +252,16 @@ Format your response clearly:
 - Use plain English
 """
 
+    # Inject rule engine context if available
+    rule_context = build_rule_engine_context_block(question)
+    if rule_context:
+        context = f"{rule_context}\n\n{'═' * 70}\nRETRIEVED GUIDELINE PASSAGES:\n{'═' * 70}\n\n{context}"
+
+    hybrid_addition = get_hybrid_system_prompt_addition() if rule_context else ""
+
     system_prompt = f"""You are Sarah, a senior mortgage underwriting assistant with deep expertise in
-Fannie Mae (FNMA), Freddie Mac (FHLMC), FHA (HUD Handbook 4000.1), and VA (VA Pamphlet 26-7) guidelines. You have access to
-guidelines from ALL FOUR agencies.
+Fannie Mae (FNMA), Freddie Mac (FHLMC), FHA (HUD Handbook 4000.1), and VA (VA Pamphlet 26-7) guidelines.
+You have access to guidelines from ALL FOUR agencies.
 
 QUESTION: {question}
 
@@ -252,7 +272,8 @@ ANSWERING RULES:
 - Use the retrieved guidelines above as your PRIMARY source — cite specific section numbers
 - IMPORTANT: After drafting your answer from the retrieved guidelines, cross-check every technical detail
   (percentages, thresholds, add-back rules, eligibility criteria, calculations, etc.) against your own
-  training knowledge of Fannie Mae Selling Guide, Freddie Mac Seller/Servicer Guide, FHA Handbook 4000.1, and VA Pamphlet 26-7
+  training knowledge of Fannie Mae Selling Guide, Freddie Mac Seller/Servicer Guide, FHA Handbook 4000.1,
+  and VA Pamphlet 26-7
 - If your training knowledge conflicts with or supplements the retrieved guidelines, use the MORE ACCURATE
   information and note the correction (e.g. "Note: Meals & entertainment is a 50% add-back, not 100%")
 - For income calculations (Form 1084, Form 91, cash flow analysis), apply the correct add-back percentages
@@ -261,16 +282,17 @@ ANSWERING RULES:
   - Fannie Mae: "Per Fannie Mae B3-3.1-09..."
   - Freddie Mac: "Per Freddie Mac Section 5303..."
   - FHA: "Per FHA Handbook 4000.1, Section II.A.4..." or "Per HUD 4000.1..."
-  - VA: "Per VA Pamphlet 26-7, Chapter 4..." or "Per VA Lender's Handbook..."
+  - VA: "Per VA Pamphlet 26-7, Ch. 4..." or "Per VA Lender's Handbook..."
 - When guidelines from multiple agencies are retrieved, compare them and note any differences
 - If a Freddie Mac chunk includes a fannie_comparison field, use that to highlight agency differences
 - For FHA-specific questions, include FHA-unique requirements: MIP, TOTAL Scorecard, 203(k), streamline refi, etc.
-- For VA-specific questions, include VA-unique requirements: entitlement, funding fee, residual income, COE, IRRRL, NOV, MPR, joint loans with non-veteran spouse, etc.
+- For VA-specific questions, include: funding fee, residual income, entitlement, IRRRL, no PMI, etc.
 - If neither the retrieved guidelines nor your training knowledge can answer the question, say so clearly
 - Never say "based on the context provided" — just give the answer directly
 - If two rules conflict or interact, explain both
 - When the loan officer doesn't specify an agency, provide the answer for ALL relevant agencies and note differences
 - For conventional vs. FHA vs. VA comparisons, clearly separate the requirements and highlight the key differences
+{hybrid_addition}
 {voice_format}"""
 
     # Build messages array
@@ -294,7 +316,7 @@ def full_rag_pipeline(question: str, for_voice: bool = False, conversation_histo
     Returns (answer_text, chunks_used, optimized_query)
     """
     optimized = optimize_query(question, conversation_history=conversation_history)
-    raw_chunks = search_pinecone(optimized, top_k=15)
+    raw_chunks = search_pinecone(optimized, top_k=10)
 
     # Ensure all four agencies are represented in the results
     fannie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Fannie Mae']
@@ -302,7 +324,7 @@ def full_rag_pipeline(question: str, for_voice: bool = False, conversation_histo
     fha_chunks = [c for c in raw_chunks if c.get('agency', '') == 'FHA']
     va_chunks = [c for c in raw_chunks if c.get('agency', '') == 'VA']
 
-    # Guarantee at least 2 chunks from each agency present, total up to 12
+    # Guarantee at least 2 chunks from each agency present, total up to 10
     agencies_present = [a for a in [fannie_chunks, freddie_chunks, fha_chunks, va_chunks] if a]
     if len(agencies_present) >= 2:
         chunks = []
@@ -314,12 +336,12 @@ def full_rag_pipeline(question: str, for_voice: bool = False, conversation_histo
                 selected.add(id(c))
         # Fill remaining slots (up to 10 total) by score
         remaining = [c for c in raw_chunks if id(c) not in selected]
-        chunks = chunks + remaining[:max(0, 12 - len(chunks))]
+        chunks = chunks + remaining[:max(0, 10 - len(chunks))]
         # Re-sort by score descending
         chunks.sort(key=lambda c: c.get('score', 0), reverse=True)
     else:
-        # Only one agency found, just take top 12
-        chunks = raw_chunks[:12]
+        # Only one agency found, just take top 10
+        chunks = raw_chunks[:10]
 
     answer    = generate_answer(question, chunks, for_voice=for_voice, conversation_history=conversation_history)
     return answer, chunks, optimized
@@ -538,7 +560,7 @@ def index():
 
 @app.route("/api/ask", methods=["POST"])
 def api_ask():
-    """Web interface posts questions here."""
+    """Web interface posts questions here. Uses hybrid rule engine + RAG."""
     data     = request.get_json()
     question = data.get("question", "").strip()
     if not question:
@@ -547,20 +569,46 @@ def api_ask():
     # Get conversation history from request (optional)
     conversation_history = data.get("conversation_history", [])
 
-    answer, chunks, optimized = full_rag_pipeline(question, for_voice=False, conversation_history=conversation_history)
+    # Step 1: Classify the query via the smart router
+    classification = classify_query(question)
+    route = classification["route"]
 
-    # Generate audio
+    # Step 2: Use hybrid pipeline
+    answer, chunks, optimized, metadata = hybrid_pipeline(
+        question,
+        rag_pipeline_fn=lambda q, fv=False, h=None: full_rag_pipeline(
+            q, for_voice=False, conversation_history=conversation_history
+        ),
+        for_voice=False,
+        conversation_history=conversation_history,
+    )
+
+    # Step 3: Generate audio
     audio_b64 = None
     if ELEVENLABS_API_KEY:
-        audio_bytes = text_to_speech(answer)
+        # For rule engine answers, use a clean text version for TTS
+        tts_text = answer[:2000]  # Limit TTS length
+        audio_bytes = text_to_speech(tts_text)
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode()
 
+    # Step 4: Extract citations from rule engine results
+    rule_citations = []
+    if metadata.get("rule_engine_data"):
+        rule_citations = metadata["rule_engine_data"].get("citations", [])
+        rule_citations = [c for c in rule_citations if c]  # Filter empties
+
     return jsonify({
-        "question":       question,
+        "question":        question,
         "optimized_query": optimized,
-        "answer":         answer,
-        "audio_base64":   audio_b64,
+        "answer":          answer,
+        "audio_base64":    audio_b64,
+        "route":           route,
+        "confidence":      classification.get("confidence", 0),
+        "rule_type":       classification.get("rule_type"),
+        "parameters":      classification.get("parameters", {}),
+        "rule_citations":  rule_citations,
+        "timing_ms":       metadata.get("timing_ms", 0),
         "sources": [{
             "chunk_id":       c.get("chunk_id"),
             "agency":         c.get("agency", ""),
@@ -573,7 +621,9 @@ def api_ask():
 
 @app.route("/api/ask-stream", methods=["POST"])
 def api_ask_stream():
-    """Streaming version of /api/ask — returns Server-Sent Events."""
+    """Streaming version of /api/ask — returns Server-Sent Events.
+    Now with hybrid rule engine: sends deterministic answer instantly,
+    then streams RAG explanation if needed."""
     data     = request.get_json()
     question = data.get("question", "").strip()
     if not question:
@@ -583,11 +633,28 @@ def api_ask_stream():
 
     def generate():
         try:
-            # Step 1: Optimize query
+            # Step 0: Run rule engine classification (instant, <5ms)
+            preprocess = hybrid_stream_preprocess(question)
+            classification = preprocess["classification"]
+            route = classification["route"]
+            rule_answer = preprocess.get("rule_engine_answer")
+            use_rag = preprocess["use_rag"]
+
+            # Send rule engine results immediately as first event
+            rule_citations = preprocess.get("rule_citations", [])
+            if rule_answer:
+                yield f"event: rule_engine\ndata: {json.dumps({'route': route, 'rule_type': classification.get('rule_type'), 'confidence': classification.get('confidence', 0), 'parameters': classification.get('parameters', {}), 'answer': rule_answer, 'citations': rule_citations})}\n\n"
+
+            # If pure rule engine, we're done — no RAG needed
+            if not use_rag and rule_answer:
+                yield f"event: done\ndata: {json.dumps({'route': route})}\n\n"
+                return
+
+            # Step 1: Optimize query for RAG
             optimized = optimize_query(question, conversation_history=conversation_history)
 
             # Step 2: Search Pinecone
-            raw_chunks = search_pinecone(optimized, top_k=15)
+            raw_chunks = search_pinecone(optimized, top_k=10)
 
             # Ensure all four agencies represented
             fannie_chunks = [c for c in raw_chunks if c.get('agency', '') == 'Fannie Mae']
@@ -604,12 +671,12 @@ def api_ask_stream():
                         chunks.append(c)
                         selected.add(id(c))
                 remaining = [c for c in raw_chunks if id(c) not in selected]
-                chunks = chunks + remaining[:max(0, 12 - len(chunks))]
+                chunks = chunks + remaining[:max(0, 10 - len(chunks))]
                 chunks.sort(key=lambda c: c.get('score', 0), reverse=True)
             else:
-                chunks = raw_chunks[:12]
+                chunks = raw_chunks[:10]
 
-            # Send metadata (sources) first
+            # Send metadata (sources)
             sources = [{
                 "chunk_id":       c.get("chunk_id"),
                 "agency":         c.get("agency", ""),
@@ -617,9 +684,18 @@ def api_ask_stream():
                 "source_section": c.get("source_section"),
                 "score":          round(c.get("score", 0), 3)
             } for c in chunks]
-            yield f"event: metadata\ndata: {json.dumps({'optimized_query': optimized, 'sources': sources})}\n\n"
-            # Step 3: Build prompt (same as generate_answer)
+            yield f"event: metadata\ndata: {json.dumps({'optimized_query': optimized, 'sources': sources, 'route': route})}\n\n"
+
+            # Step 3: Build prompt with rule engine context injection
             context = build_context(chunks)
+
+            # Inject rule engine results into context
+            rule_context_block = preprocess.get("rule_context_block")
+            if rule_context_block:
+                context = f"{rule_context_block}\n\n{'═' * 70}\nRETRIEVED GUIDELINE PASSAGES:\n{'═' * 70}\n\n{context}"
+
+            hybrid_addition = get_hybrid_system_prompt_addition() if rule_context_block else ""
+
             voice_format = """
 Format your response clearly:
 - Lead with the key rule and any critical thresholds
@@ -628,8 +704,8 @@ Format your response clearly:
 - Use plain English
 """
             system_prompt = f"""You are Sarah, a senior mortgage underwriting assistant with deep expertise in
-Fannie Mae (FNMA), Freddie Mac (FHLMC), FHA (HUD Handbook 4000.1), and VA (VA Pamphlet 26-7) guidelines. You have access to
-guidelines from ALL FOUR agencies.
+Fannie Mae (FNMA), Freddie Mac (FHLMC), FHA (HUD Handbook 4000.1), and VA (VA Pamphlet 26-7) guidelines.
+You have access to guidelines from ALL FOUR agencies.
 
 QUESTION: {question}
 
@@ -640,25 +716,19 @@ ANSWERING RULES:
 - Use the retrieved guidelines above as your PRIMARY source — cite specific section numbers
 - IMPORTANT: After drafting your answer from the retrieved guidelines, cross-check every technical detail
   (percentages, thresholds, add-back rules, eligibility criteria, calculations, etc.) against your own
-  training knowledge of Fannie Mae Selling Guide, Freddie Mac Seller/Servicer Guide, FHA Handbook 4000.1, and VA Pamphlet 26-7
+  training knowledge of all four agency guidelines
 - If your training knowledge conflicts with or supplements the retrieved guidelines, use the MORE ACCURATE
-  information and note the correction (e.g. "Note: Meals & entertainment is a 50% add-back, not 100%")
-- For income calculations (Form 1084, Form 91, cash flow analysis), apply the correct add-back percentages
-  and calculation methodology from your training knowledge, even if the retrieved chunks don't specify them
+  information and note the correction
 - Always cite the agency AND source section number:
   - Fannie Mae: "Per Fannie Mae B3-3.1-09..."
   - Freddie Mac: "Per Freddie Mac Section 5303..."
   - FHA: "Per FHA Handbook 4000.1, Section II.A.4..." or "Per HUD 4000.1..."
-  - VA: "Per VA Pamphlet 26-7, Chapter 4..." or "Per VA Lender's Handbook..."
+  - VA: "Per VA Pamphlet 26-7, Ch. 4..."
 - When guidelines from multiple agencies are retrieved, compare them and note any differences
-- If a Freddie Mac chunk includes a fannie_comparison field, use that to highlight agency differences
-- For FHA-specific questions, include FHA-unique requirements: MIP, TOTAL Scorecard, 203(k), streamline refi, etc.
-- For VA-specific questions, include VA-unique requirements: entitlement, funding fee, residual income, COE, IRRRL, NOV, MPR, joint loans with non-veteran spouse, etc.
-- If neither the retrieved guidelines nor your training knowledge can answer the question, say so clearly
+- For VA-specific questions, include: funding fee, residual income, entitlement, IRRRL, no PMI, etc.
 - Never say "based on the context provided" — just give the answer directly
-- If two rules conflict or interact, explain both
 - When the loan officer doesn't specify an agency, provide the answer for ALL relevant agencies and note differences
-- For conventional vs. FHA vs. VA comparisons, clearly separate the requirements and highlight the key differences
+{hybrid_addition}
 {voice_format}"""
 
             messages = []
@@ -676,7 +746,7 @@ ANSWERING RULES:
                 for text in stream.text_stream:
                     yield f"event: token\ndata: {json.dumps({'text': text})}\n\n"
 
-            yield f"event: done\ndata: {json.dumps({})}\n\n"
+            yield f"event: done\ndata: {json.dumps({'route': route})}\n\n"
 
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"

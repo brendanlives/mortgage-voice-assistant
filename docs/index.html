@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Movement Mortgage Test â Guideline Lookup</title>
+<title>Mortgage Guideline Assistant â Guideline Lookup</title>
 <style>
   :root {
     --primary: #1a365d;
@@ -459,13 +459,87 @@
   .chat-thread::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
   }
+
+  /* Route badge */
+  .route-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .route-badge.rule-engine {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+  }
+  .route-badge.rag {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+  }
+  .route-badge.hybrid {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+  }
+  .route-badge.comparison {
+    background: #f3e8ff;
+    color: #6b21a8;
+    border: 1px solid #c4b5fd;
+  }
+
+  /* Rule engine instant answer */
+  .rule-engine-answer {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #166534;
+  }
+  .rule-engine-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #166534;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  /* Citation chips */
+  .citation-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .citation-chip {
+    background: #ecfdf5;
+    border: 1px solid #6ee7b7;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #065f46;
+  }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>Movement Mortgage Test</h1>
-  <p>AI-Powered Fannie Mae &amp; Freddie Mac Guideline Lookup</p>
+  <h1>Mortgage Guideline Assistant</h1>
+  <p>Hybrid AI Engine — Fannie Mae + Freddie Mac + FHA + VA</p>
 </div>
 
 <div class="main-container">
@@ -474,13 +548,14 @@
     <div class="chat-thread empty" id="chatThread">
       <div class="empty-state">
         <h2>Start a Conversation</h2>
-        <p>Ask about mortgage guidelines from Fannie Mae or Freddie Mac</p>
+        <p>Ask about Fannie Mae, Freddie Mac, FHA, or VA guidelines</p>
         <div class="examples">
-          <div class="example-chip" onclick="fillExampleQuestion(this)">Gift funds for down payment</div>
-          <div class="example-chip" onclick="fillExampleQuestion(this)">Freddie Mac reserves requirements</div>
-          <div class="example-chip" onclick="fillExampleQuestion(this)">Non-occupant co-borrower guidelines</div>
-          <div class="example-chip" onclick="fillExampleQuestion(this)">DTI exceptions above 45%</div>
-          <div class="example-chip" onclick="fillExampleQuestion(this)">Self-employed income documentation</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">Max LTV for FHA purchase with 620 credit?</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">Compare VA vs FHA for first-time buyer</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">VA funding fee with 5% down, first use</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">FHA MIP on a $300K loan at 96.5% LTV</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">Max DTI for all agencies?</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">Minimum credit score for Fannie Mae?</div>
         </div>
       </div>
     </div>
@@ -716,6 +791,7 @@
       // Read SSE stream
       let fullAnswer = '';
       let sources = null;
+      let ruleEngineShown = false;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -733,17 +809,80 @@
           if (line.startsWith('event: ')) {
             eventType = line.slice(7);
           } else if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6));
-            if (eventType === 'metadata') {
-              sources = data.sources;
-            } else if (eventType === 'token') {
-              fullAnswer += data.text;
-              answerDiv.innerHTML = renderMarkdownish(fullAnswer);
-              thread.scrollTop = thread.scrollHeight;
-            } else if (eventType === 'error') {
-              fullAnswer = 'Error: ' + data.error;
-              answerDiv.innerHTML = renderMarkdownish(fullAnswer);
-            }
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (eventType === 'rule_engine') {
+                // Instant rule engine answer — show immediately
+                ruleEngineShown = true;
+                const routeClass = (data.route || '').toLowerCase().replace('_', '-');
+                const badge = document.createElement('div');
+                badge.className = 'route-badge ' + routeClass;
+                badge.textContent = (data.route || 'RULE ENGINE').replace('_', ' ') +
+                  (data.confidence ? ' ' + Math.round(data.confidence * 100) + '%' : '');
+                contentDiv.insertBefore(badge, answerDiv);
+
+                const ruleLabel = document.createElement('div');
+                ruleLabel.className = 'rule-engine-label';
+                ruleLabel.textContent = 'Deterministic Answer (instant, zero hallucination)';
+                contentDiv.insertBefore(ruleLabel, answerDiv);
+
+                const ruleBox = document.createElement('div');
+                ruleBox.className = 'rule-engine-answer';
+                // Clean up the answer for display
+                let ruleText = data.answer || '';
+                ruleText = ruleText.replace(/\[✓\]/g, '\u2705').replace(/\[✗\]/g, '\u274C');
+                ruleBox.textContent = ruleText;
+                contentDiv.insertBefore(ruleBox, answerDiv);
+
+                // Show citations if available
+                if (data.citations && data.citations.length > 0) {
+                  const citDiv = document.createElement('div');
+                  citDiv.className = 'citation-chips';
+                  data.citations.forEach(c => {
+                    if (c) {
+                      const chip = document.createElement('span');
+                      chip.className = 'citation-chip';
+                      chip.textContent = c;
+                      citDiv.appendChild(chip);
+                    }
+                  });
+                  contentDiv.insertBefore(citDiv, answerDiv);
+                }
+
+                fullAnswer = ruleText;
+                thread.scrollTop = thread.scrollHeight;
+
+              } else if (eventType === 'metadata') {
+                sources = data.sources;
+                // If this is a hybrid route, add a label before RAG streaming starts
+                if (ruleEngineShown && data.route !== 'RULE_ENGINE') {
+                  const ragLabel = document.createElement('div');
+                  ragLabel.className = 'rule-engine-label';
+                  ragLabel.style.color = '#1e40af';
+                  ragLabel.style.marginTop = '10px';
+                  ragLabel.textContent = 'Additional Context from Guidelines:';
+                  contentDiv.insertBefore(ragLabel, answerDiv);
+                }
+              } else if (eventType === 'token') {
+                fullAnswer += data.text;
+                if (ruleEngineShown) {
+                  // Hybrid mode: accumulate only the RAG streaming part
+                  if (!answerDiv._ragText) answerDiv._ragText = '';
+                  answerDiv._ragText += data.text;
+                  answerDiv.innerHTML = renderMarkdownish(answerDiv._ragText);
+                } else {
+                  // Pure RAG mode: render full accumulated answer
+                  answerDiv.innerHTML = renderMarkdownish(fullAnswer);
+                }
+                thread.scrollTop = thread.scrollHeight;
+              } else if (eventType === 'done') {
+                // If pure rule engine, no streaming happened — that's fine
+              } else if (eventType === 'error') {
+                fullAnswer = 'Error: ' + data.error;
+                answerDiv.innerHTML = renderMarkdownish(fullAnswer);
+              }
+            } catch(e) { /* skip malformed JSON */ }
             eventType = '';
           }
         }
@@ -793,13 +932,14 @@
     document.getElementById('chatThread').innerHTML = `
       <div class="empty-state">
         <h2>Start a Conversation</h2>
-        <p>Ask about mortgage guidelines from Fannie Mae or Freddie Mac</p>
+        <p>Ask about Fannie Mae, Freddie Mac, FHA, or VA guidelines</p>
         <div class="examples">
-          <div class="example-chip" onclick="fillExampleQuestion(this)">Gift funds for down payment</div>
-          <div class="example-chip" onclick="fillExampleQuestion(this)">Freddie Mac reserves requirements</div>
-          <div class="example-chip" onclick="fillExampleQuestion(this)">Non-occupant co-borrower guidelines</div>
-          <div class="example-chip" onclick="fillExampleQuestion(this)">DTI exceptions above 45%</div>
-          <div class="example-chip" onclick="fillExampleQuestion(this)">Self-employed income documentation</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">Max LTV for FHA purchase with 620 credit?</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">Compare VA vs FHA for first-time buyer</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">VA funding fee with 5% down, first use</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">FHA MIP on a $300K loan at 96.5% LTV</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">Max DTI for all agencies?</div>
+          <div class="example-chip" onclick="fillExampleQuestion(this)">Minimum credit score for Fannie Mae?</div>
         </div>
       </div>
     `;
