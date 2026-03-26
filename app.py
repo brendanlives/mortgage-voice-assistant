@@ -303,7 +303,7 @@ ANSWERING RULES:
 
     response = anthropic_client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2048,
+        max_tokens=4096,
         system=system_prompt,
         messages=messages
     )
@@ -739,7 +739,7 @@ ANSWERING RULES:
             # Step 4: Stream Claude response
             with anthropic_client.messages.stream(
                 model="claude-sonnet-4-6",
-                max_tokens=2048,
+                max_tokens=4096,
                 system=system_prompt,
                 messages=messages
             ) as stream:
