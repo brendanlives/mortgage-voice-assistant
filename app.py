@@ -152,6 +152,35 @@ def search_pinecone(query_text: str, top_k: int = 5) -> list:
     return chunks
 
 
+def search_pinecone_debug(query_text: str, top_k: int = 3) -> list:
+    """Debug version: returns raw metadata keys and content field info."""
+    index = get_pinecone_index()
+    if not index:
+        return []
+    embedding = embed_query(query_text)
+    if not embedding:
+        return []
+    results = index.query(vector=embedding, top_k=top_k, include_metadata=True)
+    debug = []
+    for match in results.matches:
+        meta = match.metadata
+        entry = {
+            "chunk_id": meta.get("chunk_id", "?"),
+            "score": match.score,
+            "metadata_keys": sorted(list(meta.keys())),
+        }
+        # Show which content fields exist and their lengths
+        for key in meta.keys():
+            val = meta[key]
+            if isinstance(val, str) and len(val) > 50:
+                entry[f"field_{key}_len"] = len(val)
+                entry[f"field_{key}_preview"] = val[:100]
+            elif isinstance(val, str):
+                entry[f"field_{key}"] = val
+        debug.append(entry)
+    return debug
+
+
 def build_context(chunks: list) -> str:
     """Format retrieved chunks into clean context for Claude."""
     parts = []
@@ -742,6 +771,18 @@ def send_sms():
 @app.route("/", methods=["GET"])
 def index():
     return render_template_string(WEB_UI)
+
+
+@app.route("/api/debug-chunks", methods=["POST"])
+def api_debug_chunks():
+    """Debug endpoint: show raw Pinecone metadata for a query."""
+    data = request.get_json()
+    question = data.get("question", "").strip()
+    if not question:
+        return jsonify({"error": "No question provided"}), 400
+    optimized = optimize_query(question)
+    debug_results = search_pinecone_debug(optimized, top_k=5)
+    return jsonify({"question": question, "optimized_query": optimized, "raw_chunks": debug_results})
 
 
 @app.route("/api/ask", methods=["POST"])
