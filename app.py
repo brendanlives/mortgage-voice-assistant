@@ -313,9 +313,36 @@ def multi_topic_search(question: str, conversation_history: list = None) -> tupl
     subtopics = decompose_into_subtopics(question)
 
     if not subtopics:
-        # Simple question — standard single search
+        # Simple question — standard single search with agency-aware filtering
         optimized = optimize_query(question, conversation_history)
-        chunks = search_pinecone(optimized, top_k=10)
+        chunks = search_pinecone(optimized, top_k=15)
+
+        # Agency-aware filtering: if the question mentions a specific agency,
+        # ensure that agency's chunks are well-represented in results
+        q_lower = question.lower()
+        target_agency = None
+        if "fha" in q_lower or "hud" in q_lower:
+            target_agency = "FHA"
+        elif "fannie" in q_lower or "fnma" in q_lower:
+            target_agency = "Fannie Mae"
+        elif "freddie" in q_lower or "fhlmc" in q_lower:
+            target_agency = "Freddie Mac"
+        elif "va " in q_lower or q_lower.startswith("va ") or "va loan" in q_lower:
+            target_agency = "VA"
+
+        if target_agency and chunks:
+            target_chunks = [c for c in chunks if c.get("agency") == target_agency]
+            other_chunks = [c for c in chunks if c.get("agency") != target_agency]
+            # If the target agency has fewer than 5 chunks in results, boost them
+            if len(target_chunks) < 5:
+                # Keep all target agency chunks first, then fill with others, max 12
+                balanced = target_chunks + other_chunks
+                chunks = balanced[:12]
+            else:
+                chunks = chunks[:12]
+        else:
+            chunks = chunks[:12]
+
         return chunks, optimized
 
     # Step 2: Complex question — search each sub-topic separately
