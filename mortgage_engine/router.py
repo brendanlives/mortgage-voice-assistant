@@ -486,6 +486,20 @@ def extract_parameters(query: str) -> Dict[str, Any]:
     elif any(w in q for w in ["du", "lpa", "automated", "aus", "total scorecard"]):
         params["underwriting_method"] = "automated"
 
+    # === Non-Occupant Co-Borrower ===
+    if any(w in q for w in ["non-occupying co-borrower", "non occupying co-borrower",
+                             "non-occupant co-borrower", "non occupant co-borrower",
+                             "non-occupying coborrower", "non occupying coborrower",
+                             "non-occupant coborrower", "non occupant coborrower",
+                             "nic co-borrower", "non-occ co-borrower",
+                             "non-occupying co borrower", "non occupying co borrower"]):
+        params["non_occupant_coborrower"] = True
+        # Check if family member is mentioned
+        if any(w in q for w in ["family", "relative", "family member"]):
+            params["coborrower_is_family"] = True
+        elif any(w in q for w in ["non-family", "non family", "unrelated", "not family", "not a family"]):
+            params["coborrower_is_family"] = False
+
     # === Compensating Factors ===
     if "compensating" in q:
         params["has_compensating_factors"] = True
@@ -619,6 +633,8 @@ def _execute_rule_engine(rule_type: str, params: dict, query: str) -> Tuple[str,
         "underwriting_method": "underwriting_method",
         "has_compensating_factors": "has_compensating_factors",
         "state": "state",
+        "non_occupant_coborrower": "non_occupant_coborrower",
+        "coborrower_is_family": "coborrower_is_family",
     }
     for param_key, scenario_key in param_mapping.items():
         if param_key in params:
@@ -635,6 +651,8 @@ def _execute_rule_engine(rule_type: str, params: dict, query: str) -> Tuple[str,
                 params.get("units", "1"),
                 params.get("rate_type", "fixed"),
                 params.get("credit_score"),
+                non_occupant_coborrower=params.get("non_occupant_coborrower", False),
+                coborrower_is_family=params.get("coborrower_is_family", True),
             )
             citations.append(r.citation)
             return str(r), citations
