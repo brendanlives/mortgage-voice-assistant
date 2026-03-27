@@ -129,8 +129,13 @@ def search_pinecone(query_text: str, top_k: int = 5) -> list:
     chunks = []
     for match in results.matches:
         meta = match.metadata
-        # Handle both old content_json format and new content_text format
+        # Handle multiple content field formats across agencies:
+        # - Fannie/Freddie use "content_text"
+        # - FHA uses "content"
+        # - Legacy format uses "content_json" (JSON string)
         content = meta.get("content_text", "")
+        if not content:
+            content = meta.get("content", "")
         if not content:
             try:
                 content = json.loads(meta.get("content_json", "{}"))
