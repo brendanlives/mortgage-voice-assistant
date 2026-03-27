@@ -109,7 +109,7 @@ RAG_PATTERNS = [
     r"(?:guideline|handbook|section|chapter|paragraph)",
     r"(?:manual\s+(?!underwr))",  # "manual" but NOT "manual underwriting" (that's a rule lookup)
     r"(?:example|scenario.*explain|walk\s+me\s+through)",
-    r"(?:gift\s+(?:fund|letter|donor|source)|asset\s+(?:verification|documentation))",
+    r"(?:gift\s+(?:fund|letter|donor|source|of\s+equity)|asset\s+(?:verification|documentation))",
     r"(?:appraisal|inspection|title|escrow|closing\s+cost)",
     r"(?:bankruptcy|foreclosure|short\s+sale|deed.in.lieu|waiting\s+period)",
     r"(?:self.employ|commission|bonus|overtime|rental\s+income|income\s+calculation)",
@@ -125,8 +125,14 @@ RAG_PATTERNS = [
     r"(?:foreign|translat|another\s+language|different\s+language|not\s+(?:in\s+)?english|indian|chinese|spanish|korean|hindi|language)",
     r"(?:foreign\s+(?:bank|asset|income|document|statement)|overseas|international\s+(?:bank|asset|income))",
 
-    # Gift funds / gift letter / gift donor
+    # Gift funds / gift letter / gift donor / gift of equity
     r"(?:gift\s+from|gift\s+money|gifted\s+(?:fund|money|down\s*payment))",
+    r"(?:gift\s+of\s+equity|equity\s+gift|equity\s+credit\s+as\s+a\s+gift)",
+
+    # Estate / family transactions / identity of interest
+    r"(?:estate\s+(?:sale|buyout|purchase|transaction)|buying\s+(?:from|out)\s+(?:a\s+)?(?:sibling|family|relative|parent|estate))",
+    r"(?:identity\s+of\s+interest|non.arm.s.length|related\s+party\s+transaction|family\s+(?:sale|buyout|transaction))",
+    r"(?:sibling|brother|sister|parent|inherit|inheritance|probate|estate|decedent|deceased)",
 
     # Co-signer / co-borrower / non-occupant
     r"(?:co.sign|cosign|co.borrow|non.occupant|non.occupying|coborrower)",
@@ -270,16 +276,28 @@ def classify_query(query: str) -> Dict[str, Any]:
         not any(t in SPECIFIC_TYPES for t in all_matched_types)
     )
 
+    # Detect when the question is fundamentally a policy/guideline question
+    # even if it incidentally mentions numbers (LTV, credit score, etc.)
+    # Key indicator: RAG score significantly dominates rule score
+    policy_dominant = (rag_score >= rule_score * 2 and rag_score >= 6)
+
     if matched_rule_type == "comparison":
         route = ROUTE_COMPARISON
         confidence = min(0.95, 0.6 + rule_score * 0.1)
         reasoning = "Multiple agencies or comparison keywords detected"
-    elif rag_score >= 8 and only_scenario_rules:
+    elif (rag_score >= 8 and only_scenario_rules) or (policy_dominant and only_scenario_rules):
         # Complex multi-topic question — let the LLM handle it entirely
         # Rule engine would only dump generic numbers that don't help
         route = ROUTE_RAG
         confidence = min(0.95, 0.6 + rag_score * 0.1)
         reasoning = "Complex multi-topic question requiring guideline synthesis (visa, gift, co-signer, etc.)"
+    elif policy_dominant:
+        # Policy-dominant question that incidentally mentions numbers
+        # Route to RAG so the LLM answers the actual policy question
+        # e.g., "can you use a gift of equity on a 60% LTV estate buyout"
+        route = ROUTE_RAG
+        confidence = min(0.95, 0.6 + rag_score * 0.1)
+        reasoning = "Policy/guideline question that incidentally mentions numbers — RAG is primary"
     elif rule_score > 0 and rag_score > 0 and only_scenario_rules and rag_score > rule_score:
         # RAG-dominant hybrid where rule engine is only scenario-level
         # Still route hybrid but flag that rule output should be contextual, not primary
