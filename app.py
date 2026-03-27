@@ -27,6 +27,7 @@ from pinecone import Pinecone
 from flask import Flask, request, Response, jsonify, render_template_string, send_file
 from flask_cors import CORS
 from twilio.twiml.voice_response import VoiceResponse, Gather
+from twilio.rest import Client as TwilioClient
 
 # ── HYBRID RULE ENGINE ─────────────────────────────────────────────────────────
 # Import the deterministic rule engine for instant, citation-backed answers
@@ -60,6 +61,7 @@ PINECONE_API_KEY   = os.environ.get("PINECONE_API_KEY", "")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN  = os.environ.get("TWILIO_AUTH_TOKEN", "")
+TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER", "")
 APP_BASE_URL       = os.environ.get("APP_BASE_URL", "http://localhost:5000")
 
 INDEX_NAME       = "mortgage-guidelines"
@@ -680,6 +682,33 @@ def serve_audio(key):
     if audio:
         return send_file(io.BytesIO(audio), mimetype="audio/mpeg")
     return "Not found", 404
+
+
+
+# -- SMS ENDPOINT (for ElevenLabs voice agent to text breakdowns) -------------
+@app.route("/api/send-sms", methods=["POST"])
+def send_sms():
+    """Send an SMS via Twilio. Used by ElevenLabs voice agent to text full breakdowns."""
+    data = request.get_json(force=True)
+    to_number = data.get("to", "").strip()
+    message_body = data.get("message", "").strip()
+
+    if not to_number or not message_body:
+        return jsonify({"error": "Both 'to' and 'message' fields are required"}), 400
+
+    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not TWILIO_PHONE_NUMBER:
+        return jsonify({"error": "Twilio is not configured on the server"}), 500
+
+    try:
+        client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        msg = client.messages.create(
+            body=message_body,
+            from_=TWILIO_PHONE_NUMBER,
+            to=to_number
+        )
+        return jsonify({"success": True, "sid": msg.sid, "status": msg.status})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ââ WEB ROUTES âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
