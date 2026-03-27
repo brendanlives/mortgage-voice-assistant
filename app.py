@@ -955,6 +955,84 @@ def status():
     })
 
 
+# -- INCOME WORKBOOK FILLER -------------------------------------------------
+TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'static', 'income_workbook_template.xlsm')
+
+@app.route("/api/income-template", methods=["GET"])
+def income_template():
+    """Serve the pre-built Income Workbook .xlsm template."""
+    if os.path.exists(TEMPLATE_PATH):
+        return send_file(
+            TEMPLATE_PATH,
+            mimetype='application/vnd.ms-excel.sheet.macroEnabled.12',
+            as_attachment=False,
+            download_name='income_workbook_template.xlsm'
+        )
+    return jsonify({"error": "Template not found"}), 404
+
+
+@app.route("/api/extract-income", methods=["POST"])
+def extract_income():
+    """
+    Proxy endpoint for Claude vision API calls.
+    Accepts: { "images": [{"data": "base64...", "mime": "image/jpeg"}], "prompt": "..." }
+    Returns: Claude JSON response.
+    """
+    if not anthropic_client:
+        return jsonify({"error": "Anthropic API not configured"}), 500
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON body"}), 400
+
+    images = data.get("images", [])
+    prompt = data.get("prompt", "")
+    if not images or not prompt:
+        return jsonify({"error": "Missing images or prompt"}), 400
+
+    # Build content blocks
+    content = []
+    for img in images:
+        b64 = img.get("data", "")
+        mime = img.get("mime", "image/jpeg")
+        if mime == "application/pdf":
+            content.append({"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}})
+        else:
+            content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}})
+    content.append({"type": "text", "text": prompt})
+
+    try:
+        import re as _re
+        response = anthropic_client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": content}]
+        )
+        text = "".join(block.text for block in response.content if hasattr(block, 'text'))
+        clean = text.replace('```json', '').replace('```', '').strip()
+        try:
+            parsed = json.loads(clean)
+        except json.JSONDecodeError:
+            m = _re.search(r'\[[\s\S]*\]|\{[\s\S]*\}', clean)
+            if m:
+                parsed = json.loads(m.group(0))
+            else:
+                return jsonify({"error": "Could not parse AI response", "raw": clean[:500]}), 500
+        return jsonify({"result": parsed})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/income-tool", methods=["GET"])
+def income_tool():
+    """Serve the Income Workbook Filler tool page."""
+    _tmpl_path = os.path.join(os.path.dirname(__file__), 'templates', 'income_tool.html')
+    if os.path.exists(_tmpl_path):
+        with open(_tmpl_path, 'r') as _f:
+            return _f.read()
+    return "<h1>Income Tool template not found</h1>", 404
+
+
 # ââ WEB UI âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 WEB_UI = """<!DOCTYPE html>
 <html lang="en">
@@ -1034,6 +1112,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="header">
   <div class="logo">ð¦</div>
   <div><div class="title">Mortgage Guideline Assistant</div><div class="sub">Fannie Mae + Freddie Mac Â· Pinecone Vector Search Â· Powered by Claude</div></div>
+  <a href="/income-tool" style="margin-left:auto;padding:6px 14px;border-radius:6px;background:#1e40af;color:#93c5fd;font-size:11px;font-weight:600;text-decoration:none;letter-spacing:.3px;transition:background .2s" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#1e40af'">Income Tool</a>
   <div class="dot" id="dot"></div>
 </div>
 <div class="main">

@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Income Workbook Filler — ReActual Intelligence</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:#0d0f14;color:#e8dcc8;min-height:100vh}
+.app{max-width:820px;margin:0 auto;padding:28px 24px 60px}
+.hdr{text-align:center;padding:16px 0 28px}
+.hdr .tag{font-size:9px;letter-spacing:4.5px;color:rgba(200,169,110,0.4);text-transform:uppercase;margin-bottom:6px}
+.hdr h1{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:#c8a96e;letter-spacing:-0.5px}
+.hdr .sub{color:rgba(255,255,255,0.28);font-size:11px;margin-top:6px;line-height:1.6}
+.sec{font-size:10px;letter-spacing:2.5px;color:rgba(200,169,110,0.4);text-transform:uppercase;margin:24px 0 10px;font-weight:600;display:flex;align-items:center;gap:10px}
+.sec::after{content:'';flex:1;height:1px;background:rgba(200,169,110,0.08)}
+
+/* Template loaded indicator */
+.tmpl-ok{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;background:rgba(200,169,110,0.06);border:1px solid rgba(200,169,110,0.15);margin-bottom:16px}
+.tmpl-ok .check{color:#6dbf6d;font-size:16px}.tmpl-ok .nm{color:#c8a96e;font-size:11px;font-weight:600}.tmpl-ok .det{color:rgba(255,255,255,0.25);font-size:10px;margin-left:auto}
+.tmpl-loading{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;background:rgba(200,169,110,0.03);border:1px solid rgba(200,169,110,0.08);margin-bottom:16px;color:rgba(200,169,110,0.4);font-size:11px}
+
+/* Tab navigation for income types */
+.tabs{display:flex;gap:0;border:1px solid rgba(200,169,110,0.15);border-radius:10px;overflow:hidden;flex-wrap:wrap}
+.tab{padding:9px 14px;font-size:10px;font-weight:600;cursor:pointer;transition:all .15s;color:rgba(200,169,110,0.35);background:rgba(200,169,110,0.02);border-right:1px solid rgba(200,169,110,0.08);flex:1;text-align:center;min-width:90px;user-select:none}
+.tab:last-child{border-right:none}
+.tab.on{background:rgba(200,169,110,0.12);color:#c8a96e}
+.tab:hover{background:rgba(200,169,110,0.06)}
+.tab .ct{display:inline-block;min-width:14px;height:14px;line-height:14px;border-radius:7px;background:rgba(200,169,110,0.2);color:#c8a96e;font-size:8px;margin-left:4px;text-align:center}
+.tab .ct.z{opacity:.3}
+
+/* Panel for each income type */
+.panel{display:none;margin-top:12px}
+.panel.show{display:block}
+
+/* Drop zones */
+.zones{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.zones.z3{grid-template-columns:1fr 1fr 1fr}
+.zone{border:1.5px dashed rgba(200,169,110,0.18);border-radius:12px;padding:14px 10px 12px;text-align:center;cursor:pointer;background:rgba(200,169,110,0.015);transition:all .2s;position:relative;overflow:hidden}
+.zone::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(200,169,110,0.04),transparent 70%);pointer-events:none}
+.zone:hover,.zone.over{border-color:rgba(200,169,110,0.5);background:rgba(200,169,110,0.04)}
+.zone .ic{font-size:20px;margin-bottom:3px}
+.zone .lb{font-weight:600;color:#c8a96e;font-size:11px}
+.zone .ht{color:rgba(255,255,255,0.25);font-size:9px;margin-top:2px;line-height:1.3}
+.tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px;justify-content:center}
+.tag-f{display:inline-flex;align-items:center;gap:3px;background:rgba(200,169,110,0.1);border-radius:5px;padding:2px 6px;font-size:8px;color:#c8a96e}
+.tag-f .x{cursor:pointer;opacity:.4;font-size:11px;line-height:1}.tag-f .x:hover{opacity:1}
+
+/* Chips */
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:6px 13px;border-radius:7px;border:1px solid rgba(200,169,110,0.15);background:rgba(200,169,110,0.02);color:rgba(200,169,110,0.45);font-size:10px;font-weight:600;cursor:pointer;transition:all .15s;user-select:none}
+.chip.on{background:rgba(200,169,110,0.15);color:#c8a96e;border-color:rgba(200,169,110,0.4)}
+.chip:hover{border-color:rgba(200,169,110,0.4)}
+
+/* Button */
+.go{width:100%;padding:13px;border-radius:10px;border:none;font-family:'DM Sans',sans-serif;font-weight:700;font-size:12px;cursor:pointer;transition:all .2s;letter-spacing:.3px;margin-top:4px}
+.go.rdy{background:linear-gradient(135deg,#c8a96e 0%,#a8854e 100%);color:#0d0f14}
+.go.off{background:rgba(200,169,110,0.06);color:rgba(255,255,255,0.2);cursor:default;pointer-events:none}
+.go.run{background:rgba(200,169,110,0.1);color:#c8a96e;cursor:wait;pointer-events:none}
+
+/* Progress */
+.bar{margin-top:8px;height:2.5px;background:rgba(200,169,110,0.06);border-radius:2px;overflow:hidden;display:none}
+.bar .fill{height:100%;background:linear-gradient(90deg,#c8a96e,#e0c48e);transition:width .3s;border-radius:2px;width:0%}
+.sts{margin-top:6px;font-size:10px;color:rgba(200,169,110,0.45);text-align:center;min-height:14px}
+
+/* Results */
+.res{margin-top:24px}
+.summ{background:linear-gradient(135deg,rgba(200,169,110,0.1),rgba(200,169,110,0.03));border:1px solid rgba(200,169,110,0.15);border-radius:14px;padding:20px 22px;margin-bottom:14px}
+.summ .big{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:#c8a96e}
+.summ .sm{font-size:10px;letter-spacing:2.5px;color:rgba(200,169,110,0.4);text-transform:uppercase}
+.summ .det{font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px}
+.card{background:rgba(255,255,255,0.015);border:1px solid rgba(200,169,110,0.07);border-radius:12px;padding:16px 20px;margin-bottom:8px}
+.card h3{font-family:'Playfair Display',serif;color:#c8a96e;font-size:15px;margin-bottom:2px}
+.card .meta{font-size:9px;color:rgba(255,255,255,0.25);margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(200,169,110,0.04)}
+.row:last-child{border:none}
+.row .l{font-size:10px;color:rgba(255,255,255,0.4)}
+.row .l code{font-family:'DM Mono',monospace;font-size:8px;opacity:.5;margin-left:3px}
+.row .v{font-family:'DM Mono',monospace;color:#c8a96e;font-size:11px;font-weight:500}
+.sav{width:100%;padding:13px;border-radius:10px;border:1.5px solid #c8a96e;background:transparent;color:#c8a96e;font-family:'DM Sans',sans-serif;font-weight:700;font-size:12px;cursor:pointer;transition:all .2s;margin-top:8px}
+.sav:hover{background:rgba(200,169,110,0.08)}
+.err-box{margin-top:10px;padding:12px 16px;border-radius:10px;background:rgba(220,80,80,0.06);border:1px solid rgba(220,80,80,0.15);color:#e8a0a0;font-size:11px;line-height:1.5}
+.note{font-size:9px;color:rgba(255,255,255,0.22);line-height:1.6;margin-top:16px;padding:12px 16px;border-radius:9px;background:rgba(255,255,255,0.012);border:1px solid rgba(200,169,110,0.04)}
+.note b{color:rgba(200,169,110,0.45);font-weight:600}
+
+.toggle-raw{display:inline-block;font-size:9px;color:rgba(200,169,110,0.35);cursor:pointer;margin-top:10px;text-decoration:underline}
+.raw-data{display:none;margin-top:8px;padding:12px;border-radius:9px;background:rgba(0,0,0,0.3);border:1px solid rgba(200,169,110,0.06);font-family:'DM Mono',monospace;font-size:8px;color:rgba(255,255,255,0.35);max-height:350px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.raw-data.show{display:block}
+
+.help{font-size:9px;color:rgba(255,255,255,0.18);margin-top:5px;line-height:1.5}
+
+/* Back link */
+.back{display:inline-flex;align-items:center;gap:6px;color:rgba(200,169,110,0.4);font-size:10px;text-decoration:none;margin-bottom:12px;transition:color .2s}
+.back:hover{color:#c8a96e}
+
+@media(max-width:700px){
+  .zones,.zones.z3{grid-template-columns:1fr}
+  .app{padding:18px 14px 40px}
+  .tabs{flex-direction:column}
+  .tab{border-right:none;border-bottom:1px solid rgba(200,169,110,0.08)}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<a href="/" class="back">&larr; Back to Guideline Assistant</a>
+
+<div class="hdr">
+  <div class="tag">AI Income Automation</div>
+  <h1>Income Workbook Filler</h1>
+  <div class="sub">Upload borrower income documents &rarr; AI extracts all data &rarr; Download filled workbook<br>Supports W-2 wage earners, self-employment, rental, and all business entity types</div>
+</div>
+
+<!-- TEMPLATE STATUS -->
+<div id="tmplStatus">
+  <div class="tmpl-loading" id="tmplLoading">&#9203; Loading Income Workbook template...</div>
+</div>
+
+<!-- INCOME TYPE TABS -->
+<div class="sec">1 &middot; Borrower Documents</div>
+
+<div class="tabs" id="tabBar">
+  <div class="tab on" data-p="w2" onclick="showPanel('w2')">W-2 Wage<span class="ct z" id="ct-w2">0</span></div>
+  <div class="tab" data-p="schc" onclick="showPanel('schc')">Sch C<span class="ct z" id="ct-schc">0</span></div>
+  <div class="tab" data-p="p1065" onclick="showPanel('p1065')">1065<span class="ct z" id="ct-p1065">0</span></div>
+  <div class="tab" data-p="s1120" onclick="showPanel('s1120')">1120S<span class="ct z" id="ct-s1120">0</span></div>
+  <div class="tab" data-p="c1120" onclick="showPanel('c1120')">1120<span class="ct z" id="ct-c1120">0</span></div>
+  <div class="tab" data-p="schf" onclick="showPanel('schf')">Sch F<span class="ct z" id="ct-schf">0</span></div>
+  <div class="tab" data-p="sche" onclick="showPanel('sche')">Sch E<span class="ct z" id="ct-sche">0</span></div>
+  <div class="tab" data-p="other" onclick="showPanel('other')">Other<span class="ct z" id="ct-other">0</span></div>
+</div>
+
+<!-- W-2 PANEL -->
+<div class="panel show" id="pnl-w2">
+  <div class="help" style="margin-bottom:8px">W-2 wage earner income: W-2 forms, year-end paystubs, and recent paystubs</div>
+  <div class="zones z3">
+    <div class="zone" data-t="w2_w2"><div class="ic">&#128203;</div><div class="lb">W-2 Forms</div><div class="ht">All years available</div><div class="tags" id="tg-w2_w2"></div></div>
+    <div class="zone" data-t="w2_ye"><div class="ic">&#128202;</div><div class="lb">Year-End Stubs</div><div class="ht">Prior year final stubs</div><div class="tags" id="tg-w2_ye"></div></div>
+    <div class="zone" data-t="w2_rc"><div class="ic">&#128176;</div><div class="lb">Recent Stubs</div><div class="ht">Most recent pay period</div><div class="tags" id="tg-w2_rc"></div></div>
+  </div>
+</div>
+
+<!-- SCH C PANEL -->
+<div class="panel" id="pnl-schc">
+  <div class="help" style="margin-bottom:8px">Sole proprietorship (Schedule C): Upload the full 1040 with Schedule C, or just the Schedule C pages</div>
+  <div class="zones">
+    <div class="zone" data-t="schc_ret"><div class="ic">&#128209;</div><div class="lb">Tax Returns</div><div class="ht">1040 + Schedule C<br>(most recent + prior year)</div><div class="tags" id="tg-schc_ret"></div></div>
+    <div class="zone" data-t="schc_pl"><div class="ic">&#128200;</div><div class="lb">P&amp;L Statements</div><div class="ht">Year-to-date profit &amp; loss<br>(if available)</div><div class="tags" id="tg-schc_pl"></div></div>
+  </div>
+</div>
+
+<!-- 1065 PANEL -->
+<div class="panel" id="pnl-p1065">
+  <div class="help" style="margin-bottom:8px">Partnership (Form 1065): Upload K-1, Form 1065, and personal 1040/W-2s from the business</div>
+  <div class="zones">
+    <div class="zone" data-t="p1065_ret"><div class="ic">&#128209;</div><div class="lb">Tax Returns &amp; K-1s</div><div class="ht">1040, K-1, Form 1065<br>(most recent + prior year)</div><div class="tags" id="tg-p1065_ret"></div></div>
+    <div class="zone" data-t="p1065_pl"><div class="ic">&#128200;</div><div class="lb">P&amp;L / Business Docs</div><div class="ht">P&amp;L, W-2s from business</div><div class="tags" id="tg-p1065_pl"></div></div>
+  </div>
+</div>
+
+<!-- 1120S PANEL -->
+<div class="panel" id="pnl-s1120">
+  <div class="help" style="margin-bottom:8px">S Corporation (Form 1120S): Upload K-1, Form 1120S, and personal 1040/W-2s from the business</div>
+  <div class="zones">
+    <div class="zone" data-t="s1120_ret"><div class="ic">&#128209;</div><div class="lb">Tax Returns &amp; K-1s</div><div class="ht">1040, K-1, Form 1120S<br>(most recent + prior year)</div><div class="tags" id="tg-s1120_ret"></div></div>
+    <div class="zone" data-t="s1120_pl"><div class="ic">&#128200;</div><div class="lb">P&amp;L / Business Docs</div><div class="ht">P&amp;L, W-2s from business</div><div class="tags" id="tg-s1120_pl"></div></div>
+  </div>
+</div>
+
+<!-- 1120 PANEL -->
+<div class="panel" id="pnl-c1120">
+  <div class="help" style="margin-bottom:8px">C Corporation (Form 1120): Upload Form 1120, 1125-E, and personal 1040/W-2s</div>
+  <div class="zones">
+    <div class="zone" data-t="c1120_ret"><div class="ic">&#128209;</div><div class="lb">Tax Returns</div><div class="ht">1040, Form 1120, 1125-E<br>(most recent + prior year)</div><div class="tags" id="tg-c1120_ret"></div></div>
+    <div class="zone" data-t="c1120_pl"><div class="ic">&#128200;</div><div class="lb">P&amp;L / Business Docs</div><div class="ht">P&amp;L, W-2s from business</div><div class="tags" id="tg-c1120_pl"></div></div>
+  </div>
+</div>
+
+<!-- SCH F PANEL -->
+<div class="panel" id="pnl-schf">
+  <div class="help" style="margin-bottom:8px">Farm income (Schedule F): Upload the full 1040 with Schedule F</div>
+  <div class="zones">
+    <div class="zone" data-t="schf_ret"><div class="ic">&#128209;</div><div class="lb">Tax Returns</div><div class="ht">1040 + Schedule F<br>(most recent + prior year)</div><div class="tags" id="tg-schf_ret"></div></div>
+    <div class="zone" data-t="schf_pl"><div class="ic">&#128200;</div><div class="lb">P&amp;L Statements</div><div class="ht">Year-to-date P&amp;L</div><div class="tags" id="tg-schf_pl"></div></div>
+  </div>
+</div>
+
+<!-- SCH E PANEL -->
+<div class="panel" id="pnl-sche">
+  <div class="help" style="margin-bottom:8px">Rental income (Schedule E): Upload 1040 with Schedule E, lease agreements, mortgage statements</div>
+  <div class="zones">
+    <div class="zone" data-t="sche_ret"><div class="ic">&#128209;</div><div class="lb">Tax Returns</div><div class="ht">1040 + Schedule E<br>(most recent + prior year)</div><div class="tags" id="tg-sche_ret"></div></div>
+    <div class="zone" data-t="sche_sup"><div class="ic">&#127968;</div><div class="lb">Lease / Mortgage Docs</div><div class="ht">Lease agreements, mortgage<br>statements, insurance</div><div class="tags" id="tg-sche_sup"></div></div>
+  </div>
+</div>
+
+<!-- OTHER PANEL -->
+<div class="panel" id="pnl-other">
+  <div class="help" style="margin-bottom:8px">Other income: Interest/dividends (Sch B), RSUs, capital gains, 1099 non-SE, drill pay, assets</div>
+  <div class="zones">
+    <div class="zone" data-t="other_doc"><div class="ic">&#128196;</div><div class="lb">Other Income Docs</div><div class="ht">Any supporting documents:<br>1099s, brokerage stmts, etc.</div><div class="tags" id="tg-other_doc"></div></div>
+    <div class="zone" data-t="other_ret"><div class="ic">&#128209;</div><div class="lb">Tax Returns</div><div class="ht">Relevant 1040 pages,<br>Schedule B/D, etc.</div><div class="tags" id="tg-other_ret"></div></div>
+  </div>
+</div>
+
+<!-- LOAN PRODUCTS -->
+<div class="sec">2 &middot; Loan Products</div>
+<div class="chips">
+  <div class="chip on" data-l="Fannie" onclick="togChip(this)">Fannie Mae</div>
+  <div class="chip on" data-l="Freddie" onclick="togChip(this)">Freddie Mac</div>
+  <div class="chip on" data-l="FHA" onclick="togChip(this)">FHA</div>
+  <div class="chip" data-l="VA" onclick="togChip(this)">VA</div>
+  <div class="chip" data-l="USDA" onclick="togChip(this)">USDA</div>
+</div>
+
+<!-- PROCESS -->
+<div class="sec">3 &middot; Process</div>
+<button class="go off" id="goBtn" onclick="runProcess()">Upload documents to begin</button>
+<div class="bar" id="bar"><div class="fill" id="fill"></div></div>
+<div class="sts" id="sts"></div>
+
+<!-- RESULTS -->
+<div class="res" id="res"></div>
+
+</div>
+
+<script>
+// ===================================================================
+// STATE
+// ===================================================================
+const F = {};
+const FILE_TYPES = ['w2_w2','w2_ye','w2_rc','schc_ret','schc_pl','p1065_ret','p1065_pl','s1120_ret','s1120_pl','c1120_ret','c1120_pl','schf_ret','schf_pl','sche_ret','sche_sup','other_doc','other_ret'];
+FILE_TYPES.forEach(t => F[t] = []);
+
+const PANEL_MAP = {w2:['w2_w2','w2_ye','w2_rc'],schc:['schc_ret','schc_pl'],p1065:['p1065_ret','p1065_pl'],s1120:['s1120_ret','s1120_pl'],c1120:['c1120_ret','c1120_pl'],schf:['schf_ret','schf_pl'],sche:['sche_ret','sche_sup'],other:['other_doc','other_ret']};
+
+let templateBuf = null, templateWB = null, mappedResult = null, filledBuffer = null;
+
+// ===================================================================
+// AUTO-LOAD TEMPLATE
+// ===================================================================
+async function loadTemplate() {
+  try {
+    const resp = await fetch('/api/income-template');
+    if (!resp.ok) throw new Error('Template fetch failed: ' + resp.status);
+    const buf = await resp.arrayBuffer();
+    templateBuf = buf;
+    templateWB = new ExcelJS.Workbook();
+    await templateWB.xlsx.load(buf);
+    document.getElementById('tmplStatus').innerHTML =
+      '<div class="tmpl-ok"><span class="check">&#10003;</span><span class="nm">Income Workbook 2026.1</span><span class="det">38 sheets &middot; auto-loaded</span></div>';
+    updBtn();
+  } catch(e) {
+    document.getElementById('tmplStatus').innerHTML =
+      '<div class="err-box">Template load failed: '+e.message+'. The tool will generate a standalone report instead.</div>';
+  }
+}
+loadTemplate();
+
+// ===================================================================
+// PANELS / TABS
+// ===================================================================
+function showPanel(p) {
+  document.querySelectorAll('.panel').forEach(el => el.classList.remove('show'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('on'));
+  document.getElementById('pnl-'+p).classList.add('show');
+  document.querySelector('.tab[data-p="'+p+'"]').classList.add('on');
+}
+
+function updCounts() {
+  for (const [panel, types] of Object.entries(PANEL_MAP)) {
+    const n = types.reduce((s,t) => s + F[t].length, 0);
+    const el = document.getElementById('ct-'+panel);
+    el.textContent = n;
+    el.className = 'ct' + (n === 0 ? ' z' : '');
+  }
+  updBtn();
+}
+
+// ===================================================================
+// FILE DROP ZONES
+// ===================================================================
+document.querySelectorAll('.zone').forEach(z => {
+  const t = z.dataset.t;
+  z.onclick = () => { const i=document.createElement('input');i.type='file';i.multiple=true;i.accept='.pdf,image/*,.jpg,.jpeg,.png,.tiff,.bmp,.gif';i.onchange=e=>addF(t,[...e.target.files]);i.click(); };
+  z.ondragover = e => { e.preventDefault(); z.classList.add('over'); };
+  z.ondragleave = () => z.classList.remove('over');
+  z.ondrop = e => { e.preventDefault(); z.classList.remove('over'); addF(t,[...e.dataTransfer.files]); };
+});
+
+function addF(t, arr) { F[t].push(...arr); renTags(t); updCounts(); }
+function rmF(t, i) { F[t].splice(i,1); renTags(t); updCounts(); }
+function renTags(t) {
+  const el = document.getElementById('tg-'+t);
+  if (!el) return;
+  el.innerHTML = F[t].map((f,i) =>
+    '<span class="tag-f">&#128196; '+( f.name.length>16?f.name.slice(0,13)+'...':f.name )+'<span class="x" onclick="event.stopPropagation();rmF(\''+t+'\','+i+')">&#215;</span></span>'
+  ).join('');
+}
+
+// ===================================================================
+// LOAN CHIPS
+// ===================================================================
+function togChip(el) { el.classList.toggle('on'); }
+function getLoans() { return [...document.querySelectorAll('.chip.on')].map(e=>e.dataset.l); }
+
+// ===================================================================
+// BUTTON STATE
+// ===================================================================
+function updBtn() {
+  const n = FILE_TYPES.reduce((s,t) => s + F[t].length, 0);
+  const btn = document.getElementById('goBtn');
+  const ok = n > 0;
+  btn.className = 'go ' + (ok ? 'rdy' : 'off');
+  btn.textContent = n > 0 ? 'Extract & Fill Workbook ('+n+' doc'+(n>1?'s':'')+')' : 'Upload documents to begin';
+}
+
+// ===================================================================
+// FILE -> BASE64
+// ===================================================================
+function toB64(file) {
+  return new Promise((res,rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ===================================================================
+// AI EXTRACTION PROMPTS
+// ===================================================================
+const PROMPT_W2 = 'You are an expert mortgage document data extractor. Analyze with extreme precision. Return ONLY valid JSON array, no markdown, no backticks.\n\nFor EACH document/page, return one object:\n\n## W-2: {"type":"w2","tax_year":2025,"employer_name":"","employer_ein":"","employee_name":"","box1_wages":0,"box3_social_security_wages":0,"box5_medicare_wages":0,"box12_codes":[],"confidence":"high"}\n\n## Paystub: {"type":"paystub","is_year_end":false,"employer_name":"","employee_name":"","pay_period_end_date":"MM/DD/YYYY","pay_period_start_date":"","pay_frequency":"biweekly","hourly_rate":0,"hours_per_period":0,"annual_salary":0,"current_regular":0,"current_overtime":0,"current_bonus":0,"current_commission":0,"ytd_gross":0,"ytd_regular":0,"ytd_overtime":0,"ytd_bonus":0,"ytd_commission":0,"ytd_other":0,"hire_date":"","confidence":"high","notes":""}\n\nRULES: pay_frequency: hourly/weekly/biweekly/semimonthly/monthly/annually. Extract ALL components separately. is_year_end=true if pay covers late December or appears final. Always return array.';
+
+const PROMPT_SCHC = 'You are an expert mortgage document data extractor specializing in IRS Schedule C (Sole Proprietorship). Return ONLY valid JSON array, no markdown, no backticks.\n\nFor each tax year\'s Schedule C found, return:\n{"type":"schedule_c","tax_year":2025,"borrower_name":"","business_name":"","line31_net_profit":0,"line30_business_use_home":0,"line6_other_income":0,"line12_depletion":0,"line13_depreciation":0,"line24b_meals":0,"line44a_business_miles":0,"amortization_casualty":0,"misc":0,"confidence":"high","notes":""}\n\nRULES: Negative values for losses. line6_other_income only if NONRECURRING. line44a = actual miles number. If 1040 is present, also extract: {"type":"form_1040","tax_year":2025,"borrower_name":"","filing_status":"","total_income_line9":0,"agi_line11":0}. Always return array.';
+
+const PROMPT_1065 = 'You are an expert mortgage data extractor for Form 1065 (Partnership). Return ONLY valid JSON array.\n\nFor K-1 from 1065: {"type":"k1_1065","tax_year":2025,"borrower_name":"","business_name":"","ein":"","line1_ordinary_income":0,"line2_net_rental":0,"line3_other_net_income":0,"line4c_guaranteed_payments":0,"ownership_pct":0,"ending_capital":0,"final_k1":false,"confidence":"high"}\n\nFor Form 1065 business return: {"type":"form_1065","tax_year":2025,"business_name":"","ein":"","line4_pass_through":0,"line5_net_gain":0,"line6_other_income":0,"line7_other_income":0,"line16c_depreciation":0,"line17_depletion":0,"line_m1_4b_travel_ent":0,"sched_L_line16_col_d_mortgages":0,"form8825_line14_depreciation":0,"amortization_casualty":0,"misc":0,"confidence":"high"}\n\nFor W-2 from business: {"type":"w2","tax_year":2025,"employer_name":"","employee_name":"","box1_wages":0,"box3_social_security_wages":0,"box5_medicare_wages":0,"confidence":"high"}\n\nFor Schedule E Part II: {"type":"sch_e_part2","tax_year":2025,"borrower_name":"","business_name":"","ein":"","box28_income_loss":0}\n\nAlways return array.';
+
+const PROMPT_1120S = 'You are an expert mortgage data extractor for Form 1120S (S Corporation). Return ONLY valid JSON array.\n\nFor K-1 from 1120S: {"type":"k1_1120s","tax_year":2025,"borrower_name":"","business_name":"","ein":"","line1_ordinary_income":0,"line2_net_rental":0,"line3_other_net_income":0,"ownership_pct":0,"final_k1":false,"confidence":"high"}\n\nFor Form 1120S: {"type":"form_1120s","tax_year":2025,"business_name":"","ein":"","line4_net_gain":0,"line5_other_income":0,"line14_depreciation":0,"line15_depletion":0,"line_m1_3b_travel_ent":0,"sched_L_line17_col_d_mortgages":0,"form8825_line14_depreciation":0,"amortization_casualty":0,"misc":0,"confidence":"high"}\n\nFor W-2/1040: {"type":"w2","tax_year":2025,"employer_name":"","employee_name":"","box1_wages":0,"box3_social_security_wages":0,"box5_medicare_wages":0}\nFor Schedule E Part II: {"type":"sch_e_part2","tax_year":2025,"borrower_name":"","business_name":"","ein":"","box28_income_loss":0}\n\nAlways return array.';
+
+const PROMPT_1120 = 'You are an expert mortgage data extractor for Form 1120 (C Corporation). Return ONLY valid JSON array.\n\nFor Form 1120: {"type":"form_1120","tax_year":2025,"business_name":"","ein":"","line30_taxable_income":0,"line31_total_tax":0,"line8_capital_gain":0,"line9_net_gain":0,"line10_other_income":0,"line20_depreciation":0,"line21_depletion":0,"line25_domestic_production":0,"line29a_b_nol_special_deductions":0,"line_m1_5c_travel_ent":0,"sched_L_line17_col_d_mortgages":0,"amortization_casualty":0,"misc":0,"confidence":"high"}\n\nFor 1125-E (officer compensation): {"type":"form_1125e","tax_year":2025,"officer_name":"","compensation":0,"ownership_pct":0}\n\nFor W-2/1040: {"type":"w2","tax_year":2025,"employer_name":"","employee_name":"","box1_wages":0,"box3_social_security_wages":0,"box5_medicare_wages":0}\n\nAlways return array.';
+
+const PROMPT_SCHF = 'You are an expert mortgage data extractor for Schedule F (Farm Income). Return ONLY valid JSON array.\n\n{"type":"schedule_f","tax_year":2025,"borrower_name":"","crop_activity":"","line34_net_profit":0,"line3a_minus_3b_coop":0,"line4a_minus_4b_ccc":0,"line5a_minus_5b":0,"line6a_minus_6b":0,"nontax_coop_ccc_total":0,"line8_other_income":0,"line14_depreciation":0,"amortization_casualty_depletion":0,"line32_business_use_home":0,"misc":0,"confidence":"high","notes":""}\n\nRULES: nontax_coop_ccc_total = sum of (3a-3b)+(4a-4b)+(5a-5b)+(6a-6b). line8 only if NONRECURRING. Always return array.';
+
+const PROMPT_SCHE = 'You are an expert mortgage data extractor for Schedule E (Rental Income). Return ONLY valid JSON array.\n\n{"type":"schedule_e","tax_year":2025,"borrower_name":"","property_address":"","line3_rents_received":0,"line20_total_expenses":0,"line9_insurance":0,"line12_mortgage_interest":0,"line16_taxes":0,"hoa_dues":0,"line18_depreciation_depletion":0,"misc_onetime":0,"confidence":"high","notes":""}\n\nFor lease/mortgage docs: {"type":"rental_support","property_address":"","monthly_rent":0,"monthly_mortgage":0,"monthly_insurance":0,"monthly_taxes":0,"monthly_hoa":0}\n\nAlways return array.';
+
+const PROMPT_OTHER = 'You are an expert mortgage data extractor. Analyze these documents for any income type. Return ONLY valid JSON array.\n\nTypes to look for:\n- Interest/Dividends (Sch B): {"type":"schedule_b","tax_year":2025,"borrower_name":"","total_interest":0,"total_dividends":0}\n- 1099 income: {"type":"form_1099","tax_year":2025,"borrower_name":"","payer_name":"","amount":0,"type_code":"NEC/MISC/INT/DIV"}\n- RSU/Stock: {"type":"rsu","borrower_name":"","employer_name":"","vesting_schedule":"","annual_vested_value":0}\n- Capital Gains: {"type":"capital_gains","tax_year":2025,"borrower_name":"","short_term_gain":0,"long_term_gain":0}\n- Any other: {"type":"other_income","description":"","amount":0,"frequency":"monthly/annual","tax_year":2025}\n\nAlways return array.';
+
+// ===================================================================
+// CALL BACKEND API (proxied through our server)
+// ===================================================================
+async function callAI(b64, mime, prompt) {
+  const resp = await fetch('/api/extract-income', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      images: [{ data: b64, mime: mime }],
+      prompt: prompt
+    })
+  });
+  if (!resp.ok) {
+    const e = await resp.text();
+    throw new Error('API ' + resp.status + ': ' + e.slice(0,200));
+  }
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error);
+  return data.result;
+}
+
+// ===================================================================
+// HELPERS
+// ===================================================================
+function round2(n) { return Math.round((n||0) * 100) / 100; }
+function exDate(str) { if (!str) return null; var d = new Date(str); return isNaN(d) ? null : d; }
+function w2Wages(w) { return w ? Math.max(w.box1_wages||0, w.box3_social_security_wages||0, w.box5_medicare_wages||0) : 0; }
+
+// ===================================================================
+// MAP W-2 WAGE EARNER DATA -> CELLS
+// ===================================================================
+function mapW2(docs) {
+  var w2s = docs.filter(function(d){return d.type==='w2'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var stubs = docs.filter(function(d){return d.type==='paystub'}).sort(function(a,b){return new Date(b.pay_period_end_date||0)-new Date(a.pay_period_end_date||0)});
+  var recent = stubs.find(function(s){return !s.is_year_end}) || stubs[0];
+  var yeStubs = stubs.filter(function(s){return s.is_year_end});
+
+  var borrower = (recent && recent.employee_name) || (w2s[0] && w2s[0].employee_name) || '';
+  var employer = (recent && recent.employer_name) || (w2s[0] && w2s[0].employer_name) || '';
+  var hireDate = recent ? recent.hire_date : null;
+  var payEnd = recent ? recent.pay_period_end_date : null;
+  var freq = (recent && recent.pay_frequency) || 'biweekly';
+  var freqMap = {hourly:2,weekly:3,biweekly:4,semimonthly:5,monthly:6,annually:7};
+  var currentYear = payEnd ? new Date(payEnd).getFullYear() : new Date().getFullYear();
+
+  var expertBase = 0;
+  if (recent) {
+    if (recent.hourly_rate > 0) expertBase = recent.hourly_rate;
+    else if (recent.annual_salary > 0) expertBase = recent.annual_salary;
+    else if (recent.current_regular > 0) expertBase = recent.current_regular;
+  }
+  var hoursPerWeek = (freq === 'hourly' && recent && recent.hours_per_period > 0)
+    ? (freq === 'biweekly' ? recent.hours_per_period / 2 : recent.hours_per_period)
+    : (freq === 'hourly' ? 40 : 0);
+
+  var yeByYear = function(yr) { return yeStubs.find(function(s) { return new Date(s.pay_period_end_date).getFullYear() === yr; }); };
+  var w2ByYear = function(yr) { return w2s.find(function(w) { return w.tax_year === yr; }); };
+
+  var hasBreakdown = (recent && recent.ytd_regular > 0 && recent.ytd_gross !== recent.ytd_regular) || yeStubs.some(function(s) { return s.ytd_regular > 0 && s.ytd_gross !== s.ytd_regular; });
+
+  var priorYE = yeByYear(currentYear - 1), priorW2 = w2ByYear(currentYear - 1);
+  var twoYrYE = yeByYear(currentYear - 2), twoYrW2 = w2ByYear(currentYear - 2);
+
+  var priorBase = priorYE && priorYE.ytd_regular > 0 ? priorYE.ytd_regular : (priorYE && priorYE.ytd_gross > 0 ? priorYE.ytd_gross - (priorYE.ytd_overtime||0) - (priorYE.ytd_bonus||0) - (priorYE.ytd_commission||0) : (priorW2 ? w2Wages(priorW2) : 0));
+  if (priorBase < 0) priorBase = (priorYE && priorYE.ytd_gross) || (priorW2 ? w2Wages(priorW2) : 0);
+
+  var twoYrBase = twoYrYE && twoYrYE.ytd_regular > 0 ? twoYrYE.ytd_regular : (twoYrYE && twoYrYE.ytd_gross > 0 ? twoYrYE.ytd_gross - (twoYrYE.ytd_overtime||0) - (twoYrYE.ytd_bonus||0) - (twoYrYE.ytd_commission||0) : (twoYrW2 ? w2Wages(twoYrW2) : 0));
+  if (twoYrBase < 0) twoYrBase = (twoYrYE && twoYrYE.ytd_gross) || (twoYrW2 ? w2Wages(twoYrW2) : 0);
+
+  var cells = {};
+  var ws = 'Income Exp & Avg, W2';
+  var c = function(ref, val) { if (val !== undefined && val !== null && val !== '' && val !== 0) cells[ws+'!'+ref] = val; };
+
+  c('C6', borrower); c('C8', employer);
+  if (hireDate) c('E14', exDate(hireDate));
+  if (payEnd) c('E16', exDate(payEnd));
+  c('S111', freqMap[freq] || 4);
+  c('M110', 1); c('D110', false);
+  if (expertBase > 0) c('B26', round2(expertBase));
+  if (hoursPerWeek > 0) c('K26', hoursPerWeek);
+
+  var b28val = recent && recent.ytd_regular > 0 ? recent.ytd_regular : (recent ? recent.ytd_gross||0 : 0);
+  if (b28val > 0) c('B28', round2(b28val));
+  if (priorBase > 0) c('B30', round2(priorBase));
+  if (twoYrBase > 0) c('B32', round2(twoYrBase));
+
+  if (hasBreakdown) {
+    var otYTD=recent?recent.ytd_overtime||0:0, otPrior=priorYE?priorYE.ytd_overtime||0:0, otTwoYr=twoYrYE?twoYrYE.ytd_overtime||0:0;
+    if (otYTD>0||otPrior>0||otTwoYr>0) { c('C41','Overtime');c('M111',1);c('D111',true); if(otYTD>0)c('B45',round2(otYTD)); if(otPrior>0)c('B47',round2(otPrior)); if(otTwoYr>0)c('B49',round2(otTwoYr)); }
+    var bYTD=recent?recent.ytd_bonus||0:0, bPrior=priorYE?priorYE.ytd_bonus||0:0, bTwoYr=twoYrYE?twoYrYE.ytd_bonus||0:0;
+    if (bYTD>0||bPrior>0||bTwoYr>0) { c('C58','Bonus');c('M112',1);c('D112',true); if(bYTD>0)c('B62',round2(bYTD)); if(bPrior>0)c('B64',round2(bPrior)); if(bTwoYr>0)c('B66',round2(bTwoYr)); }
+    var cYTD=recent?recent.ytd_commission||0:0, cPrior=priorYE?priorYE.ytd_commission||0:0, cTwoYr=twoYrYE?twoYrYE.ytd_commission||0:0;
+    if (cYTD>0||cPrior>0||cTwoYr>0) { c('C75','Commission');c('M113',1);c('D113',true); if(cYTD>0)c('B79',round2(cYTD)); if(cPrior>0)c('B81',round2(cPrior)); if(cTwoYr>0)c('B83',round2(cTwoYr)); }
+  }
+
+  return {borrower:borrower, employer:employer, currentYear:currentYear, cells:cells, w2s:w2s, stubs:stubs};
+}
+
+// ===================================================================
+// MAP SCHEDULE C -> CELLS
+// ===================================================================
+function mapSchC(docs) {
+  var schcs = docs.filter(function(d){return d.type==='schedule_c'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  if (!schcs.length) return null;
+  var ws = 'Sch C';
+  var cells = {};
+  var c = function(ref, val) { if (val !== undefined && val !== null && val !== '' && val !== 0) cells[ws+'!'+ref] = val; };
+
+  var borrower = schcs[0].borrower_name || '';
+  var business = schcs[0].business_name || '';
+  c('D6', borrower); c('D8', business);
+
+  var yr1 = schcs[0], yr2 = schcs[1];
+  if (yr1) {
+    c('J11', round2(yr1.line31_net_profit));
+    c('J12', round2(yr1.line30_business_use_home));
+    if (yr1.line6_other_income) c('J13', round2(yr1.line6_other_income));
+    c('J14', round2(yr1.line12_depletion));
+    c('J15', round2(yr1.line13_depreciation));
+    if (yr1.line24b_meals) c('J16', round2(yr1.line24b_meals));
+    if (yr1.line44a_business_miles) c('J19', round2(yr1.line44a_business_miles));
+    if (yr1.amortization_casualty) c('J22', round2(yr1.amortization_casualty));
+    if (yr1.misc) c('J23', round2(yr1.misc));
+  }
+  if (yr2) {
+    c('M11', round2(yr2.line31_net_profit));
+    c('M12', round2(yr2.line30_business_use_home));
+    if (yr2.line6_other_income) c('M13', round2(yr2.line6_other_income));
+    c('M14', round2(yr2.line12_depletion));
+    c('M15', round2(yr2.line13_depreciation));
+    if (yr2.line24b_meals) c('M16', round2(yr2.line24b_meals));
+    if (yr2.line44a_business_miles) c('M19', round2(yr2.line44a_business_miles));
+    if (yr2.amortization_casualty) c('M22', round2(yr2.amortization_casualty));
+    if (yr2.misc) c('M23', round2(yr2.misc));
+  }
+
+  return {borrower:borrower, business:business, type:'Schedule C', cells:cells, docs:schcs};
+}
+
+// ===================================================================
+// MAP 1065 -> CELLS
+// ===================================================================
+function map1065(docs) {
+  var k1s = docs.filter(function(d){return d.type==='k1_1065'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var forms = docs.filter(function(d){return d.type==='form_1065'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var w2s = docs.filter(function(d){return d.type==='w2'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var epart2 = docs.filter(function(d){return d.type==='sch_e_part2'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  if (!k1s.length && !forms.length) return null;
+
+  var ws = '1065', cells = {};
+  var c = function(ref, val) { if (val !== undefined && val !== null && val !== '' && val !== 0) cells[ws+'!'+ref] = val; };
+
+  var borrower = (k1s[0] && k1s[0].borrower_name) || (w2s[0] && w2s[0].employee_name) || '';
+  var business = (k1s[0] && k1s[0].business_name) || (forms[0] && forms[0].business_name) || '';
+  c('D6', borrower); c('D8', business);
+
+  var k1_1 = k1s[0], form_1 = forms[0], w2_1 = w2s[0], ep2_1 = epart2[0];
+  if (w2_1) c('J11', round2(w2Wages(w2_1)));
+  if (ep2_1) c('J12', round2(Math.abs(ep2_1.box28_income_loss)));
+  if (k1_1) {
+    c('J16', round2(k1_1.line1_ordinary_income));
+    c('J17', round2((k1_1.line2_net_rental||0) + (k1_1.line3_other_net_income||0)));
+    c('J18', round2(k1_1.line4c_guaranteed_payments));
+    if (k1_1.ownership_pct > 0) c('J37', round2(k1_1.ownership_pct / 100));
+  }
+  if (form_1) {
+    if (form_1.line4_pass_through) c('J26', round2(form_1.line4_pass_through));
+    if (form_1.line5_net_gain || form_1.line6_other_income || form_1.line7_other_income)
+      c('J27', round2((form_1.line5_net_gain||0)+(form_1.line6_other_income||0)+(form_1.line7_other_income||0)));
+    c('J28', round2(form_1.line16c_depreciation));
+    c('J29', round2(form_1.line17_depletion));
+    if (form_1.amortization_casualty) c('J30', round2(form_1.amortization_casualty));
+    if (form_1.sched_L_line16_col_d_mortgages) c('J31', round2(form_1.sched_L_line16_col_d_mortgages));
+    if (form_1.line_m1_4b_travel_ent) c('J33', round2(form_1.line_m1_4b_travel_ent));
+    if (form_1.form8825_line14_depreciation) c('J34', round2(form_1.form8825_line14_depreciation));
+    if (form_1.misc) c('J35', round2(form_1.misc));
+  }
+
+  var k1_2 = k1s[1], form_2 = forms[1], w2_2 = w2s[1], ep2_2 = epart2[1];
+  if (w2_2) c('M11', round2(w2Wages(w2_2)));
+  if (ep2_2) c('M12', round2(Math.abs(ep2_2.box28_income_loss)));
+  if (k1_2) {
+    c('M16', round2(k1_2.line1_ordinary_income));
+    c('M17', round2((k1_2.line2_net_rental||0)+(k1_2.line3_other_net_income||0)));
+    c('M18', round2(k1_2.line4c_guaranteed_payments));
+    if (k1_2.ownership_pct > 0) c('M37', round2(k1_2.ownership_pct / 100));
+  }
+  if (form_2) {
+    if (form_2.line4_pass_through) c('M26', round2(form_2.line4_pass_through));
+    if (form_2.line5_net_gain||form_2.line6_other_income||form_2.line7_other_income)
+      c('M27', round2((form_2.line5_net_gain||0)+(form_2.line6_other_income||0)+(form_2.line7_other_income||0)));
+    c('M28', round2(form_2.line16c_depreciation));
+    c('M29', round2(form_2.line17_depletion));
+    if (form_2.amortization_casualty) c('M30', round2(form_2.amortization_casualty));
+    if (form_2.sched_L_line16_col_d_mortgages) c('M31', round2(form_2.sched_L_line16_col_d_mortgages));
+    if (form_2.line_m1_4b_travel_ent) c('M33', round2(form_2.line_m1_4b_travel_ent));
+    if (form_2.form8825_line14_depreciation) c('M34', round2(form_2.form8825_line14_depreciation));
+    if (form_2.misc) c('M35', round2(form_2.misc));
+  }
+
+  return {borrower:borrower, business:business, type:'Partnership (1065)', cells:cells, docs:docs};
+}
+
+// ===================================================================
+// MAP 1120S -> CELLS
+// ===================================================================
+function map1120S(docs) {
+  var k1s = docs.filter(function(d){return d.type==='k1_1120s'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var forms = docs.filter(function(d){return d.type==='form_1120s'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var w2s = docs.filter(function(d){return d.type==='w2'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var epart2 = docs.filter(function(d){return d.type==='sch_e_part2'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  if (!k1s.length && !forms.length) return null;
+
+  var ws = '1120S', cells = {};
+  var c = function(ref, val) { if (val !== undefined && val !== null && val !== '' && val !== 0) cells[ws+'!'+ref] = val; };
+
+  var borrower = (k1s[0] && k1s[0].borrower_name) || (w2s[0] && w2s[0].employee_name) || '';
+  var business = (k1s[0] && k1s[0].business_name) || (forms[0] && forms[0].business_name) || '';
+  c('D6', borrower); c('D8', business);
+
+  var k1_1=k1s[0], form_1=forms[0], w2_1=w2s[0], ep2_1=epart2[0];
+  if (w2_1) c('J11', round2(w2Wages(w2_1)));
+  if (ep2_1) c('J12', round2(Math.abs(ep2_1.box28_income_loss)));
+  if (k1_1) {
+    c('J16', round2(k1_1.line1_ordinary_income));
+    c('J17', round2((k1_1.line2_net_rental||0)+(k1_1.line3_other_net_income||0)));
+    if (k1_1.ownership_pct>0) c('J35', round2(k1_1.ownership_pct/100));
+  }
+  if (form_1) {
+    if (form_1.line4_net_gain||form_1.line5_other_income) c('J25', round2((form_1.line4_net_gain||0)+(form_1.line5_other_income||0)));
+    c('J26', round2(form_1.line14_depreciation));
+    c('J27', round2(form_1.line15_depletion));
+    if (form_1.amortization_casualty) c('J28', round2(form_1.amortization_casualty));
+    if (form_1.sched_L_line17_col_d_mortgages) c('J29', round2(form_1.sched_L_line17_col_d_mortgages));
+    if (form_1.line_m1_3b_travel_ent) c('J31', round2(form_1.line_m1_3b_travel_ent));
+    if (form_1.form8825_line14_depreciation) c('J32', round2(form_1.form8825_line14_depreciation));
+    if (form_1.misc) c('J33', round2(form_1.misc));
+  }
+
+  var k1_2=k1s[1], form_2=forms[1], w2_2=w2s[1], ep2_2=epart2[1];
+  if (w2_2) c('M11', round2(w2Wages(w2_2)));
+  if (ep2_2) c('M12', round2(Math.abs(ep2_2.box28_income_loss)));
+  if (k1_2) {
+    c('M16', round2(k1_2.line1_ordinary_income));
+    c('M17', round2((k1_2.line2_net_rental||0)+(k1_2.line3_other_net_income||0)));
+    if (k1_2.ownership_pct>0) c('M35', round2(k1_2.ownership_pct/100));
+  }
+  if (form_2) {
+    if (form_2.line4_net_gain||form_2.line5_other_income) c('M25', round2((form_2.line4_net_gain||0)+(form_2.line5_other_income||0)));
+    c('M26', round2(form_2.line14_depreciation));
+    c('M27', round2(form_2.line15_depletion));
+    if (form_2.amortization_casualty) c('M28', round2(form_2.amortization_casualty));
+    if (form_2.sched_L_line17_col_d_mortgages) c('M29', round2(form_2.sched_L_line17_col_d_mortgages));
+    if (form_2.line_m1_3b_travel_ent) c('M31', round2(form_2.line_m1_3b_travel_ent));
+    if (form_2.form8825_line14_depreciation) c('M32', round2(form_2.form8825_line14_depreciation));
+    if (form_2.misc) c('M33', round2(form_2.misc));
+  }
+
+  return {borrower:borrower, business:business, type:'S Corporation (1120S)', cells:cells, docs:docs};
+}
+
+// ===================================================================
+// MAP 1120 -> CELLS
+// ===================================================================
+function map1120(docs) {
+  var forms = docs.filter(function(d){return d.type==='form_1120'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var w2s = docs.filter(function(d){return d.type==='w2'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  var comp = docs.filter(function(d){return d.type==='form_1125e'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  if (!forms.length && !w2s.length) return null;
+
+  var ws = '1120', cells = {};
+  var c = function(ref, val) { if (val !== undefined && val !== null && val !== '' && val !== 0) cells[ws+'!'+ref] = val; };
+
+  var borrower = (comp[0] && comp[0].officer_name) || (w2s[0] && w2s[0].employee_name) || '';
+  var business = (forms[0] && forms[0].business_name) || '';
+  c('D6', borrower); c('D8', business);
+
+  var f1 = forms[0], w1 = w2s[0], co1 = comp[0];
+  if (w1) c('J14', round2(w2Wages(w1)));
+  if (f1) {
+    c('J21', round2(f1.line30_taxable_income));
+    if (f1.line31_total_tax) c('J22', round2(f1.line31_total_tax));
+    if (f1.line8_capital_gain||f1.line9_net_gain) c('J23', round2((f1.line8_capital_gain||0)+(f1.line9_net_gain||0)));
+    if (f1.line10_other_income) c('J24', round2(f1.line10_other_income));
+    c('J25', round2(f1.line20_depreciation));
+    c('J26', round2(f1.line21_depletion));
+    if (f1.line25_domestic_production) c('J27', round2(f1.line25_domestic_production));
+    if (f1.amortization_casualty) c('J28', round2(f1.amortization_casualty));
+    if (f1.line29a_b_nol_special_deductions) c('J29', round2(f1.line29a_b_nol_special_deductions));
+    if (f1.sched_L_line17_col_d_mortgages) c('J30', round2(f1.sched_L_line17_col_d_mortgages));
+    if (f1.line_m1_5c_travel_ent) c('J32', round2(f1.line_m1_5c_travel_ent));
+    if (f1.misc) c('J33', round2(f1.misc));
+  }
+  if (co1 && co1.ownership_pct > 0) c('J35', round2(co1.ownership_pct / 100));
+
+  var f2 = forms[1], w2 = w2s[1], co2 = comp[1];
+  if (w2) c('M14', round2(w2Wages(w2)));
+  if (f2) {
+    c('M21', round2(f2.line30_taxable_income));
+    if (f2.line31_total_tax) c('M22', round2(f2.line31_total_tax));
+    if (f2.line8_capital_gain||f2.line9_net_gain) c('M23', round2((f2.line8_capital_gain||0)+(f2.line9_net_gain||0)));
+    if (f2.line10_other_income) c('M24', round2(f2.line10_other_income));
+    c('M25', round2(f2.line20_depreciation));
+    c('M26', round2(f2.line21_depletion));
+    if (f2.line25_domestic_production) c('M27', round2(f2.line25_domestic_production));
+    if (f2.amortization_casualty) c('M28', round2(f2.amortization_casualty));
+    if (f2.line29a_b_nol_special_deductions) c('M29', round2(f2.line29a_b_nol_special_deductions));
+    if (f2.sched_L_line17_col_d_mortgages) c('M30', round2(f2.sched_L_line17_col_d_mortgages));
+    if (f2.line_m1_5c_travel_ent) c('M32', round2(f2.line_m1_5c_travel_ent));
+    if (f2.misc) c('M33', round2(f2.misc));
+  }
+  if (co2 && co2.ownership_pct > 0) c('M35', round2(co2.ownership_pct / 100));
+
+  return {borrower:borrower, business:business, type:'C Corporation (1120)', cells:cells, docs:docs};
+}
+
+// ===================================================================
+// MAP SCHEDULE F -> CELLS
+// ===================================================================
+function mapSchF(docs) {
+  var schfs = docs.filter(function(d){return d.type==='schedule_f'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  if (!schfs.length) return null;
+
+  var ws = 'Sch F', cells = {};
+  var c = function(ref, val) { if (val !== undefined && val !== null && val !== '' && val !== 0) cells[ws+'!'+ref] = val; };
+
+  var borrower = schfs[0].borrower_name || '';
+  c('D6', borrower); c('D8', schfs[0].crop_activity || '');
+
+  var yr1 = schfs[0], yr2 = schfs[1];
+  if (yr1) {
+    c('J12', round2(yr1.line34_net_profit));
+    c('J13', round2(yr1.nontax_coop_ccc_total));
+    if (yr1.line8_other_income) c('J15', round2(yr1.line8_other_income));
+    c('J16', round2(yr1.line14_depreciation));
+    if (yr1.amortization_casualty_depletion) c('J17', round2(yr1.amortization_casualty_depletion));
+    if (yr1.line32_business_use_home) c('J18', round2(yr1.line32_business_use_home));
+    if (yr1.misc) c('J19', round2(yr1.misc));
+  }
+  if (yr2) {
+    c('M12', round2(yr2.line34_net_profit));
+    c('M13', round2(yr2.nontax_coop_ccc_total));
+    if (yr2.line8_other_income) c('M15', round2(yr2.line8_other_income));
+    c('M16', round2(yr2.line14_depreciation));
+    if (yr2.amortization_casualty_depletion) c('M17', round2(yr2.amortization_casualty_depletion));
+    if (yr2.line32_business_use_home) c('M18', round2(yr2.line32_business_use_home));
+    if (yr2.misc) c('M19', round2(yr2.misc));
+  }
+
+  return {borrower:borrower, business:schfs[0].crop_activity||'', type:'Schedule F (Farm)', cells:cells, docs:schfs};
+}
+
+// ===================================================================
+// MAP SCHEDULE E -> CELLS
+// ===================================================================
+function mapSchE(docs) {
+  var sches = docs.filter(function(d){return d.type==='schedule_e'}).sort(function(a,b){return (b.tax_year||0)-(a.tax_year||0)});
+  if (!sches.length) return null;
+
+  var ws = 'Rent Inc. (sch E)', cells = {};
+  var c = function(ref, val) { if (val !== undefined && val !== null && val !== '' && val !== 0) cells[ws+'!'+ref] = val; };
+
+  var borrower = sches[0].borrower_name || '';
+  c('B5', sches[0].property_address || '');
+
+  var yr1 = sches[0], yr2 = sches[1];
+  if (yr1) {
+    c('J20', round2(yr1.line3_rents_received));
+    c('J21', round2(yr1.line20_total_expenses));
+    c('J22', round2(yr1.line9_insurance));
+    c('J23', round2(yr1.line12_mortgage_interest));
+    c('J24', round2(yr1.line16_taxes));
+    if (yr1.hoa_dues) c('J25', round2(yr1.hoa_dues));
+    c('J26', round2(yr1.line18_depreciation_depletion));
+    if (yr1.misc_onetime) c('J27', round2(yr1.misc_onetime));
+  }
+  if (yr2) {
+    c('N20', round2(yr2.line3_rents_received));
+    c('N21', round2(yr2.line20_total_expenses));
+    c('N22', round2(yr2.line9_insurance));
+    c('N23', round2(yr2.line12_mortgage_interest));
+    c('N24', round2(yr2.line16_taxes));
+    if (yr2.hoa_dues) c('N25', round2(yr2.hoa_dues));
+    c('N26', round2(yr2.line18_depreciation_depletion));
+    if (yr2.misc_onetime) c('N27', round2(yr2.misc_onetime));
+  }
+
+  var support = docs.find(function(d){return d.type==='rental_support'});
+  if (support) {
+    if (support.monthly_mortgage) c('M43', round2(support.monthly_mortgage));
+    if (support.monthly_insurance) c('M44', round2(support.monthly_insurance));
+    if (support.monthly_taxes) c('M45', round2(support.monthly_taxes));
+    if (support.monthly_hoa) c('M46', round2(support.monthly_hoa));
+  }
+
+  return {borrower:borrower, property:sches[0].property_address||'', type:'Schedule E (Rental)', cells:cells, docs:sches};
+}
+
+// ===================================================================
+// MAP OTHER INCOME
+// ===================================================================
+function mapOther(docs) {
+  if (!docs.length) return null;
+  return {type:'Other Income', docs:docs, cells:{}};
+}
+
+// ===================================================================
+// FILL WORKBOOK
+// ===================================================================
+async function fillWorkbook(allCells, loans) {
+  if (!templateWB || !templateBuf) return createReport(allCells, loans);
+
+  var wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(templateBuf);
+
+  for (var key in allCells) {
+    var parts = key.split('!');
+    var sheetName = parts[0];
+    var cellRef = parts[1];
+    var ws = wb.getWorksheet(sheetName);
+    if (ws && allCells[key] !== undefined && allCells[key] !== null) {
+      ws.getCell(cellRef).value = allCells[key];
+    }
+  }
+
+  var id = wb.getWorksheet('I&D Worksheet');
+  if (id) {
+    var ltMap = {Fannie:'Conventional',Freddie:'Conventional',FHA:'FHA',VA:'VA',USDA:'USDA'};
+    if (loans[0]) id.getCell('J8').value = ltMap[loans[0]] || loans[0];
+  }
+
+  var w2ws = wb.getWorksheet('Income Exp & Avg, W2');
+  if (w2ws) {
+    if (loans.indexOf('Fannie') >= 0) w2ws.getCell('M20').value = 'Fannie';
+    else if (loans.indexOf('Freddie') >= 0) w2ws.getCell('M20').value = 'Freddie';
+    else w2ws.getCell('M20').value = 'N/A';
+  }
+
+  return await wb.xlsx.writeBuffer();
+}
+
+// ===================================================================
+// STANDALONE REPORT (fallback if template fails)
+// ===================================================================
+async function createReport(allCells, loans) {
+  var wb = new ExcelJS.Workbook();
+  var ws = wb.addWorksheet('AI Income Summary');
+  ws.columns = [{width:4},{width:30},{width:14},{width:20},{width:18}];
+
+  var hFont={name:'Arial',size:12,bold:true,color:{argb:'FF1a1a2e'}};
+  var dFont={name:'Arial',size:10,color:{argb:'FF333333'}};
+  var bFont={name:'Arial',size:10,bold:true,color:{argb:'FF0000FF'}};
+  var hFill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1a1a2e'}};
+  var wFont={name:'Arial',size:10,bold:true,color:{argb:'FFFFFFFF'}};
+
+  var r = 2;
+  ws.getCell('B'+r).value = 'AI-Extracted Income Cell Mapping Report'; ws.getCell('B'+r).font = hFont; r++;
+  ws.getCell('B'+r).value = 'Products: '+loans.join(', ')+' | Generated: '+new Date().toLocaleString(); ws.getCell('B'+r).font = dFont; r+=2;
+
+  var bySheet = {};
+  for (var key in allCells) {
+    var spl = key.split('!');
+    var sheet = spl[0], cell = spl[1];
+    if (!bySheet[sheet]) bySheet[sheet] = [];
+    bySheet[sheet].push({cell:cell, val:allCells[key]});
+  }
+
+  for (var sh in bySheet) {
+    ws.getCell('B'+r).value = 'Sheet: '+sh; ws.getCell('B'+r).font = {name:'Arial',size:11,bold:true,color:{argb:'FF1a1a2e'}}; r++;
+    ['','Cell','Value'].forEach(function(h,i) { var c=ws.getCell(r,i+1); c.value=h; c.font=wFont; c.fill=hFill; }); r++;
+    bySheet[sh].forEach(function(entry) {
+      ws.getCell('B'+r).value = entry.cell; ws.getCell('B'+r).font = {name:'Consolas',size:9,color:{argb:'FF888888'}};
+      ws.getCell('C'+r).value = entry.val instanceof Date ? entry.val.toLocaleDateString() : entry.val;
+      ws.getCell('C'+r).font = bFont;
+      if (typeof entry.val === 'number') ws.getCell('C'+r).numFmt = '#,##0.00';
+      r++;
+    });
+    r++;
+  }
+
+  return await wb.xlsx.writeBuffer();
+}
+
+// ===================================================================
+// MAIN PROCESS
+// ===================================================================
+async function runProcess() {
+  var totalFiles = FILE_TYPES.reduce(function(s,t){return s + F[t].length}, 0);
+  if (!totalFiles) return;
+
+  var btn = document.getElementById('goBtn');
+  var bar = document.getElementById('bar');
+  var fill = document.getElementById('fill');
+  var sts = document.getElementById('sts');
+  var res = document.getElementById('res');
+
+  btn.className = 'go run'; btn.textContent = 'Processing...';
+  bar.style.display = 'block'; fill.style.width = '0%';
+  res.innerHTML = '';
+
+  try {
+    var categories = [
+      {types:['w2_w2','w2_ye','w2_rc'], prompt:PROMPT_W2, label:'W-2 Wage'},
+      {types:['schc_ret','schc_pl'], prompt:PROMPT_SCHC, label:'Schedule C'},
+      {types:['p1065_ret','p1065_pl'], prompt:PROMPT_1065, label:'Partnership 1065'},
+      {types:['s1120_ret','s1120_pl'], prompt:PROMPT_1120S, label:'S Corp 1120S'},
+      {types:['c1120_ret','c1120_pl'], prompt:PROMPT_1120, label:'C Corp 1120'},
+      {types:['schf_ret','schf_pl'], prompt:PROMPT_SCHF, label:'Schedule F'},
+      {types:['sche_ret','sche_sup'], prompt:PROMPT_SCHE, label:'Schedule E'},
+      {types:['other_doc','other_ret'], prompt:PROMPT_OTHER, label:'Other Income'},
+    ];
+
+    var allExtracted = {};
+    var processed = 0;
+
+    for (var ci = 0; ci < categories.length; ci++) {
+      var cat = categories[ci];
+      var files = cat.types.reduce(function(arr,t){return arr.concat(F[t])},[]);
+      if (!files.length) continue;
+
+      allExtracted[cat.label] = [];
+
+      for (var fi = 0; fi < files.length; fi++) {
+        var file = files[fi];
+        processed++;
+        fill.style.width = Math.round(processed/totalFiles*75)+'%';
+        sts.textContent = 'AI analyzing '+file.name+' ('+cat.label+')...';
+
+        var b64 = await toB64(file);
+        var mime = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+        var result = await callAI(b64, mime, cat.prompt);
+        var docs = Array.isArray(result) ? result : [result];
+        allExtracted[cat.label] = allExtracted[cat.label].concat(docs);
+      }
+    }
+
+    fill.style.width = '80%';
+    sts.textContent = 'Mapping to workbook cells...';
+
+    var results = [];
+    var allCells = {};
+
+    if (allExtracted['W-2 Wage'] && allExtracted['W-2 Wage'].length) {
+      var r = mapW2(allExtracted['W-2 Wage']);
+      results.push({borrower:r.borrower,employer:r.employer,currentYear:r.currentYear,cells:r.cells,w2s:r.w2s,stubs:r.stubs, label:'W-2 Wage Earner'});
+      Object.assign(allCells, r.cells);
+    }
+    if (allExtracted['Schedule C'] && allExtracted['Schedule C'].length) {
+      var r = mapSchC(allExtracted['Schedule C']);
+      if (r) { results.push({borrower:r.borrower,business:r.business,type:r.type,cells:r.cells,docs:r.docs, label:'Schedule C'}); Object.assign(allCells, r.cells); }
+    }
+    if (allExtracted['Partnership 1065'] && allExtracted['Partnership 1065'].length) {
+      var r = map1065(allExtracted['Partnership 1065']);
+      if (r) { results.push({borrower:r.borrower,business:r.business,type:r.type,cells:r.cells,docs:r.docs, label:'Partnership 1065'}); Object.assign(allCells, r.cells); }
+    }
+    if (allExtracted['S Corp 1120S'] && allExtracted['S Corp 1120S'].length) {
+      var r = map1120S(allExtracted['S Corp 1120S']);
+      if (r) { results.push({borrower:r.borrower,business:r.business,type:r.type,cells:r.cells,docs:r.docs, label:'S Corp 1120S'}); Object.assign(allCells, r.cells); }
+    }
+    if (allExtracted['C Corp 1120'] && allExtracted['C Corp 1120'].length) {
+      var r = map1120(allExtracted['C Corp 1120']);
+      if (r) { results.push({borrower:r.borrower,business:r.business,type:r.type,cells:r.cells,docs:r.docs, label:'C Corp 1120'}); Object.assign(allCells, r.cells); }
+    }
+    if (allExtracted['Schedule F'] && allExtracted['Schedule F'].length) {
+      var r = mapSchF(allExtracted['Schedule F']);
+      if (r) { results.push({borrower:r.borrower,business:r.business,type:r.type,cells:r.cells,docs:r.docs, label:'Schedule F (Farm)'}); Object.assign(allCells, r.cells); }
+    }
+    if (allExtracted['Schedule E'] && allExtracted['Schedule E'].length) {
+      var r = mapSchE(allExtracted['Schedule E']);
+      if (r) { results.push({borrower:r.borrower,property:r.property,type:r.type,cells:r.cells,docs:r.docs, label:'Schedule E (Rental)'}); Object.assign(allCells, r.cells); }
+    }
+    if (allExtracted['Other Income'] && allExtracted['Other Income'].length) {
+      var r = mapOther(allExtracted['Other Income']);
+      if (r) results.push({type:r.type,docs:r.docs,cells:r.cells, label:'Other Income'});
+    }
+
+    fill.style.width = '90%';
+    sts.textContent = templateWB ? 'Writing to workbook...' : 'Generating report...';
+
+    var loans = getLoans();
+    var buffer = await fillWorkbook(allCells, loans);
+    var bytes = new Uint8Array(buffer);
+    var bin = ''; for (var i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
+    filledBuffer = btoa(bin);
+
+    fill.style.width = '100%';
+    sts.textContent = templateWB ? 'Workbook filled!' : 'Report generated!';
+
+    mappedResult = {results:results, allCells:allCells, allExtracted:allExtracted, loans:loans};
+    renderResults(mappedResult);
+    btn.className = 'go rdy'; btn.textContent = 'Re-process';
+
+  } catch(err) {
+    sts.textContent = '';
+    res.innerHTML = '<div class="err-box">Error: <b>'+err.message+'</b></div>';
+    btn.className = 'go rdy'; btn.textContent = 'Retry';
+    console.error(err);
+  }
+}
+
+// ===================================================================
+// RENDER RESULTS
+// ===================================================================
+function renderResults(m) {
+  var div = document.getElementById('res');
+  var cellCount = Object.keys(m.allCells).length;
+  var sheets = {};
+  Object.keys(m.allCells).forEach(function(k){sheets[k.split('!')[0]]=true});
+  var sheetCount = Object.keys(sheets).length;
+
+  var h = '<div class="summ">' +
+    '<div class="sm">Data Extracted &amp; Mapped</div>' +
+    '<div class="big">'+cellCount+' cells &rarr; '+sheetCount+' sheet'+(sheetCount>1?'s':'')+'</div>' +
+    '<div class="det">'+m.results.map(function(r){return r.label}).join(' &middot; ')+' &middot; '+m.loans.join(', ')+'</div>' +
+  '</div>';
+
+  for (var ri=0; ri<m.results.length; ri++) {
+    var r = m.results[ri];
+    var typeCells = [];
+    if (r.cells) { for (var ck in r.cells) typeCells.push([ck, r.cells[ck]]); }
+    h += '<div class="card"><h3>'+r.label+'</h3>';
+    if (r.borrower) h += '<div class="meta">'+r.borrower+(r.employer?' &middot; '+r.employer:'')+(r.business?' &middot; '+r.business:'')+(r.property?' &middot; '+r.property:'')+'</div>';
+
+    if (typeCells.length) {
+      for (var ti=0; ti<typeCells.length; ti++) {
+        var key = typeCells[ti][0], val = typeCells[ti][1];
+        var spl = key.split('!');
+        var display = val instanceof Date ? val.toLocaleDateString() :
+          (typeof val === 'number' && Math.abs(val) > 1 ? '$'+val.toLocaleString(undefined,{minimumFractionDigits:2}) : val);
+        h += '<div class="row"><span class="l">'+spl[0]+'<code>'+spl[1]+'</code></span><span class="v">'+display+'</span></div>';
+      }
+    } else if (r.docs && r.docs.length) {
+      h += '<div class="row"><span class="l">Extracted '+r.docs.length+' document(s)</span><span class="v">&mdash;</span></div>';
+    }
+    h += '</div>';
+  }
+
+  h += '<button class="sav" onclick="download()">&#128190; Download '+(templateWB?'Filled Workbook':'Income Report')+'</button>';
+  h += '<span class="toggle-raw" onclick="document.getElementById(\'rawD\').classList.toggle(\'show\')">View raw extracted data</span>';
+  h += '<div class="raw-data" id="rawD">'+JSON.stringify(m.allExtracted, null, 2)+'</div>';
+  h += '<div class="note"><b>Important:</b> '+(templateWB?'Values written to blue input cells only. Open in Excel and press Ctrl+Shift+F9 to recalculate all formulas. ':'')+'All AI-extracted figures should be verified against original documents by the processor/underwriter. Self-employment sheets (Sch C, 1065, 1120S, 1120, Sch F) do NOT auto-feed to the Income Summary.</div>';
+
+  div.innerHTML = h;
+}
+
+// ===================================================================
+// DOWNLOAD
+// ===================================================================
+function download() {
+  if (!filledBuffer) return;
+  var name = 'Income_Workbook_Filled_' + new Date().toISOString().slice(0,10);
+  var raw = atob(filledBuffer);
+  var arr = new Uint8Array(raw.length);
+  for (var i=0; i<raw.length; i++) arr[i] = raw.charCodeAt(i);
+  var blob = new Blob([arr], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a'); a.href = url; a.download = name + '.xlsx'; a.click();
+  URL.revokeObjectURL(url);
+  document.getElementById('sts').textContent = 'Downloaded: '+name+'.xlsx';
+}
+</script>
+</body>
+</html>
