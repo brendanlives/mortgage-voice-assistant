@@ -211,7 +211,14 @@ class RuleResult:
 
     def __repr__(self):
         status = "✓" if self.eligible else "✗"
-        return f"[{status}] {self.agency} | {self.rule_name}: {self.value} ({self.citation})"
+        base = f"[{status}] {self.agency} | {self.rule_name}: {self.value} ({self.citation})"
+        # For LTV results, also show minimum down payment
+        if self.rule_name == "max_ltv" and self.value is not None and isinstance(self.value, (int, float)) and 0 < self.value <= 100:
+            dp = round(100 - self.value, 2)
+            base += f" | min_down_payment: {dp}%"
+        if self.notes:
+            base += f" | {self.notes}"
+        return base
 
 
 class ScenarioResult:
