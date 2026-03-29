@@ -19,7 +19,7 @@ Voice flow:
   7. Wrong? One tap/word logs the correction
 """
 
-import os, sys, json, io, base64, datetime, hashlib
+import os, sys, json, io, base64, datetime, hashlib, threading
 import anthropic
 import requests
 from openai import OpenAI
@@ -93,6 +93,7 @@ get_pinecone_index()
 # In-memory stores
 AUDIO_CACHE    = {}   # hash â mp3 bytes
 CALL_SESSIONS  = {}   # call_sid â {conversation history}
+PENDING_ANSWERS = {}  # call_sid -> {"status": "processing"|"ready", "answer": str, "audio_key": str|None}
 FEEDBACK_LOG   = []
 
 # ââ CORE: EMBED â SEARCH â ANSWER âââââââââââââââââââââââââââââââââââââââââââââ
@@ -666,9 +667,28 @@ def scenario_borrower():
     return Response(str(resp), mimetype="text/xml")
 
 
+def _process_answer_async(call_sid, full_question):
+    """Background thread: run RAG pipeline, cache audio, mark answer ready."""
+    try:
+        answer, chunks, optimized = full_rag_pipeline(full_question, for_voice=True)
+        audio_key = cache_audio(answer) if ELEVENLABS_API_KEY else None
+        PENDING_ANSWERS[call_sid] = {
+            "status": "ready",
+            "answer": answer,
+            "audio_key": audio_key,
+        }
+    except Exception as e:
+        PENDING_ANSWERS[call_sid] = {
+            "status": "ready",
+            "answer": f"I'm sorry, I ran into an issue processing that question. Could you try rephrasing it?",
+            "audio_key": None,
+        }
+        print(f"[voice] Error processing answer for {call_sid}: {e}")
+
+
 @app.route("/voice/answer", methods=["POST"])
 def voice_answer():
-    """Got the full scenario â now run the RAG pipeline and answer."""
+    """Got the full scenario -- kick off RAG pipeline in background, return hold music."""
     resp     = VoiceResponse()
     call_sid = request.form.get("CallSid", "unknown")
     question = request.form.get("SpeechResult", "").strip()
@@ -681,29 +701,73 @@ def voice_answer():
     session["question"] = full_question
     CALL_SESSIONS[call_sid] = session
 
-    # Run RAG pipeline
-    answer, chunks, optimized = full_rag_pipeline(full_question, for_voice=True)
-
-    # Cache and play answer
-    audio_key = cache_audio(answer) if ELEVENLABS_API_KEY else None
-
-    # After answer, listen for feedback
-    g = Gather(
-        input="speech",
-        action=f"/voice/feedback?sid={call_sid}",
-        method="POST",
-        speech_timeout=4,
-        language="en-US"
+    # Start background processing
+    PENDING_ANSWERS[call_sid] = {"status": "processing"}
+    thread = threading.Thread(
+        target=_process_answer_async,
+        args=(call_sid, full_question),
+        daemon=True
     )
-    if audio_key:
-        g.play(f"{APP_BASE_URL}/audio/{audio_key}")
-    else:
-        g.say(answer, voice="alice")
-    resp.append(g)
+    thread.start()
 
-    # If no feedback, close politely
-    resp.say("Thank you. Call back anytime.", voice="alice")
-    resp.hangup()
+    # Return immediate response: brief hold message + redirect to polling endpoint
+    resp.say("Great question. Let me look that up for you.", voice="alice")
+    resp.pause(length=2)
+    resp.redirect(f"/voice/poll_answer?sid={call_sid}&attempt=1", method="POST")
+
+    return Response(str(resp), mimetype="text/xml")
+
+
+@app.route("/voice/poll_answer", methods=["POST"])
+def voice_poll_answer():
+    """Poll for the background answer. If ready, play it. If not, wait and retry."""
+    resp     = VoiceResponse()
+    call_sid = request.args.get("sid", request.form.get("CallSid", "unknown"))
+    attempt  = int(request.args.get("attempt", "1"))
+
+    pending = PENDING_ANSWERS.get(call_sid, {})
+
+    if pending.get("status") == "ready":
+        # Answer is ready -- play it
+        answer    = pending.get("answer", "I couldn't find an answer to that question.")
+        audio_key = pending.get("audio_key")
+
+        # Clean up
+        PENDING_ANSWERS.pop(call_sid, None)
+
+        # Play answer and listen for feedback
+        g = Gather(
+            input="speech",
+            action=f"/voice/feedback?sid={call_sid}",
+            method="POST",
+            speech_timeout=4,
+            language="en-US"
+        )
+        if audio_key:
+            g.play(f"{APP_BASE_URL}/audio/{audio_key}")
+        else:
+            g.say(answer, voice="alice")
+        resp.append(g)
+
+        # If no feedback, close politely
+        resp.say("Thank you. Call back anytime.", voice="alice")
+        resp.hangup()
+    elif attempt >= 15:
+        # Timeout after ~30 seconds of polling -- give up gracefully
+        PENDING_ANSWERS.pop(call_sid, None)
+        resp.say(
+            "I'm sorry, it's taking longer than expected to look that up. "
+            "Please try calling back and I'll be ready for you.",
+            voice="alice"
+        )
+        resp.hangup()
+    else:
+        # Still processing -- wait 2 seconds and poll again
+        resp.pause(length=2)
+        resp.redirect(
+            f"/voice/poll_answer?sid={call_sid}&attempt={attempt + 1}",
+            method="POST"
+        )
 
     return Response(str(resp), mimetype="text/xml")
 
