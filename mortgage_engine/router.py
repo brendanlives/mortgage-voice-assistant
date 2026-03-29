@@ -25,7 +25,7 @@ from rule_engine import (
     lookup_va_residual_income,
     quick_ltv, quick_dti, quick_credit, quick_funding_fee, quick_mip,
 )
-from rules_database import AGENCY_ALIASES, resolve_agency
+from rules_database import AGENCY_ALIASES, resolve_agency, ALL_AGENCIES
 
 
 # =============================================================================
@@ -92,6 +92,11 @@ RULE_ENGINE_PATTERNS = [
     # Direct comparison requests
     (r"(?:compare|comparison|versus|vs\.?|difference|better|which\s+(?:is|agency|program))", "comparison"),
     (r"(?:fannie|freddie|fha|va).+(?:\bvs\b|\bversus\b|\bor\b|\bcompared\b|\bdiffer)", "comparison"),
+
+    # Derogatory events / waiting periods (rule engine has exact tables)
+    (r"(?:waiting\s+period|how\s+long\s+(?:after|until|since|before))\s*.*(?:bankruptcy|foreclosure|short\s+sale|deed.in.lieu)", "derogatory_event"),
+    (r"(?:bankruptcy|foreclosure|short\s+sale|deed.in.lieu)\s*.*(?:waiting\s+period|how\s+(?:long|many\s+years))", "derogatory_event"),
+    (r"(?:chapter\s+(?:7|13)\s+(?:bankruptcy|waiting|period))", "derogatory_event"),
 
     # Specific numbers / scenarios (low priority — only adds context)
     (r"(?:\d+)\s*(?:unit|bedroom|year|month)", "scenario"),
@@ -202,6 +207,36 @@ def classify_query(query: str) -> Dict[str, Any]:
     """
     query_lower = query.lower().strip()
 
+    # ─── DEFINITIONAL QUESTION DETECTOR ──────────────────────────────────
+    # "What is PMI?", "What are compensating factors?", "Define CLTV",
+    # "Explain 203k loan" → always HYBRID so the LLM defines the term
+    # first, then shows any relevant rule engine numbers as context.
+    # Without this, trigger keywords like "PMI", "CLTV", "203k" cause
+    # the rule engine to intercept and dump a raw number table.
+    # ─────────────────────────────────────────────────────────────────────
+    is_definitional = bool(re.match(
+        r"^(?:what\s+(?:is|are|does|do)\s+|define\s+|explain\s+|"
+        r"what'?s\s+(?:a\s+|an\s+|the\s+)?|"
+        r"can\s+you\s+(?:explain|define|describe)\s+|"
+        r"tell\s+me\s+(?:about|what)\s+|"
+        r"how\s+(?:does|do)\s+(?:a\s+|an\s+|the\s+)?)",
+        query_lower
+    ))
+
+    # ─── POLICY QUESTION DETECTOR ────────────────────────────────────────
+    # "Can you remove a borrower...", "Is it possible to...", "Are you
+    # allowed to..." — these ask about policy, not numbers. Even if they
+    # mention trigger words like "rate and term refinance", route HYBRID.
+    # ─────────────────────────────────────────────────────────────────────
+    is_policy_question = bool(re.match(
+        r"^(?:can\s+(?:you|i|we|a\s+borrower|the\s+borrower|someone)\s+"
+        r"(?!explain|define|describe))|"
+        r"^(?:is\s+it\s+(?:possible|allowed|ok|okay|permitted)\s+to\s+)|"
+        r"^(?:are\s+(?:you|we|borrowers?)\s+(?:able|allowed|permitted)\s+to\s+)|"
+        r"^(?:do\s+(?:you|i|we)\s+(?:need|have)\s+to\s+)",
+        query_lower
+    ))
+
     # Extract parameters from the query
     params = extract_parameters(query_lower)
 
@@ -215,7 +250,8 @@ def classify_query(query: str) -> Dict[str, Any]:
     # Among specific types, pick the most relevant (by match count)
     SPECIFIC_TYPES = {"ltv", "dti", "credit_score", "mi", "mip",
                       "funding_fee", "reserves", "residual_income",
-                      "loan_limit", "eligibility", "comparison"}
+                      "loan_limit", "eligibility", "comparison",
+                      "derogatory_event"}
     all_matched_types = []
     type_match_count = {}
     for pattern, rule_type in RULE_ENGINE_PATTERNS:
@@ -232,7 +268,7 @@ def classify_query(query: str) -> Dict[str, Any]:
     TYPE_PRIORITY = {
         "funding_fee": 10, "mip": 10, "mi": 9, "residual_income": 9,
         "reserves": 8, "loan_limit": 8, "credit_score": 7, "dti": 7,
-        "ltv": 5, "eligibility": 3, "comparison": 3,
+        "derogatory_event": 6, "ltv": 5, "eligibility": 3, "comparison": 3,
     }
     if all_matched_types:
         specific_matches = {t: c for t, c in type_match_count.items() if t in SPECIFIC_TYPES}
@@ -343,6 +379,35 @@ def classify_query(query: str) -> Dict[str, Any]:
     )
     force_rag = is_complex and route in (ROUTE_RULE_ENGINE, ROUTE_COMPARISON)
 
+    # ─── DEFINITIONAL QUESTION OVERRIDE ─────────────────────────────────
+    # If the question is definitional ("What is X?"), always route HYBRID
+    # so the LLM can define the term AND the rule engine can add numbers.
+    # This prevents "What is PMI?" from dumping a raw MI coverage table.
+    # ─────────────────────────────────────────────────────────────────────
+    if is_definitional and route == ROUTE_RULE_ENGINE:
+        route = ROUTE_HYBRID
+        confidence = min(0.9, 0.5 + (rule_score + rag_score) * 0.05)
+        reasoning = f"Definitional question about '{matched_rule_type}' — HYBRID for definition + rule data"
+        force_rag = True
+
+    # Policy questions ("Can you...", "Is it possible to...") should never
+    # go pure RULE_ENGINE — they need RAG to explain the policy.
+    if is_policy_question and route == ROUTE_RULE_ENGINE:
+        route = ROUTE_HYBRID
+        confidence = min(0.9, 0.5 + (rule_score + rag_score) * 0.05)
+        reasoning = "Policy question (can/is it possible) — HYBRID for policy context + any rule data"
+        force_rag = True
+
+    # When a specific rule type with deterministic data (like derogatory_event)
+    # was identified but the query got routed to pure RAG, upgrade to HYBRID
+    # so the rule engine's exact data supplements the RAG answer.
+    specific_with_data = {"derogatory_event", "funding_fee", "mip", "mi"}
+    if matched_rule_type in specific_with_data and route == ROUTE_RAG:
+        route = ROUTE_HYBRID
+        confidence = min(0.9, 0.5 + (rule_score + rag_score) * 0.05)
+        reasoning = f"Upgrading to HYBRID — rule engine has exact {matched_rule_type} data to supplement RAG"
+        force_rag = True
+
     return {
         "route": route,
         "rule_type": matched_rule_type,
@@ -446,7 +511,8 @@ def extract_parameters(query: str) -> Dict[str, Any]:
         params["ltv"] = float(ltv_match.group(1))
 
     # === Down Payment ===
-    dp_match = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%?\s*(?:down|down\s*payment)", q)
+    # Matches: "10% down", "10% or more down", "10 percent down payment", "5% down payment"
+    dp_match = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%?\s*(?:or\s+more\s+|or\s+less\s+|plus\s+|)?(?:down|down\s*payment)", q)
     if not dp_match:
         dp_match = re.search(r"(?:down|down\s*payment)\s*(?:of|is|at|=)?\s*(\d{1,3}(?:\.\d+)?)\s*%?", q)
     if dp_match:
@@ -771,6 +837,35 @@ def _execute_rule_engine(rule_type: str, params: dict, query: str) -> Tuple[str,
         loan = params.get("loan_amount", 300000)
         r = lookup_va_residual_income(state, family, loan)
         return str(r), [r.citation]
+
+    elif rule_type == "derogatory_event":
+        # Look up waiting periods from all agencies (or specific agency if provided)
+        agencies_to_check = [params["agency"]] if params.get("agency") else ["Fannie Mae", "Freddie Mac", "FHA", "VA"]
+        lines = []
+        for ag in agencies_to_check:
+            agency_data = ALL_AGENCIES.get(ag, {})
+            derog = agency_data.get("derogatory_events", {})
+            if derog:
+                lines.append(f"\n**{ag} Waiting Periods:**")
+                for event_key, event_data in derog.items():
+                    name = event_key.replace("_", " ").title()
+                    years = event_data.get("waiting_period_years", "N/A")
+                    ext = event_data.get("with_extenuating")
+                    from_date = event_data.get("from", "")
+                    notes = event_data.get("notes", "")
+                    citation = event_data.get("citation", "")
+                    line = f"  - {name}: {years} years"
+                    if from_date:
+                        line += f" (from {from_date})"
+                    if ext is not None:
+                        line += f" | With extenuating: {ext} years"
+                    if notes:
+                        line += f" | {notes}"
+                    if citation:
+                        line += f" [{citation}]"
+                        citations.append(citation)
+                    lines.append(line)
+        return "\n".join(lines) if lines else "No derogatory event data found.", citations
 
     elif rule_type in ("eligibility", "scenario"):
         scenario = LoanScenario(**scenario_kwargs)
