@@ -522,15 +522,24 @@ def lookup_credit_score(agency_name: str, credit_score: Optional[int] = None) ->
     cs_rules = agency.get("credit_score", {})
 
     if agency_key in ("Fannie Mae", "Freddie Mac"):
-        # Both require 620 minimum
         min_key = "du_minimum" if agency_key == "Fannie Mae" else "lpa_minimum"
         entry = cs_rules.get(min_key, {})
-        min_score = entry.get("min_score", 620)
-        eligible = credit_score >= min_score if credit_score else True
-        return RuleResult("min_credit_score", min_score, agency=agency_key,
-                          citation=entry.get("citation", ""),
-                          notes=entry.get("notes", ""),
-                          eligible=eligible)
+        min_score = entry.get("min_score")  # None for Fannie Mae post SEL-2025-09
+
+        if min_score is None:
+            # Fannie Mae removed the 620 minimum as of Nov 16, 2025 (SEL-2025-09)
+            # DU performs comprehensive risk analysis — no hard floor
+            return RuleResult("min_credit_score", "No minimum (DU risk analysis)",
+                              agency=agency_key,
+                              citation=entry.get("citation", ""),
+                              notes=entry.get("notes", ""),
+                              eligible=True)
+        else:
+            eligible = credit_score >= min_score if credit_score else True
+            return RuleResult("min_credit_score", min_score, agency=agency_key,
+                              citation=entry.get("citation", ""),
+                              notes=entry.get("notes", ""),
+                              eligible=eligible)
 
     elif agency_key == "FHA":
         if credit_score is None:

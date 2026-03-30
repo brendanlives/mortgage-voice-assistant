@@ -151,20 +151,25 @@ FANNIE_MAE = {
     },
 
     # ----- CREDIT SCORE -----
+    # UPDATED per SEL-2025-09 (effective Nov 16, 2025):
+    # Fannie Mae REMOVED the 620 minimum credit score requirement.
+    # DU now performs comprehensive risk analysis without a hard floor.
+    # Individual lenders may still set their own overlay minimums.
     "credit_score": {
         "du_minimum": {
-            "min_score": 620,
-            "citation": "B3-5.1-01, Credit Score Requirements",
-            "notes": "DU requires minimum 620 representative score"
+            "min_score": None,
+            "citation": "SEL-2025-09; B3-5.1-01 (revised Nov 16, 2025)",
+            "notes": "As of Nov 16, 2025, Fannie Mae no longer requires a minimum 620 credit score. DU performs comprehensive risk analysis. Individual lenders may still set overlay minimums (commonly 620-640)."
         },
         "manual_minimum": {
             "min_score": 620,
             "citation": "B3-5.1-01",
-            "notes": "Manual underwriting also requires 620 minimum"
+            "notes": "Manual underwriting still requires 620 minimum. The SEL-2025-09 change applies to DU only."
         },
         "homeready": {
             "min_score": 620,
             "citation": "B5-6-02, HomeReady Requirements",
+            "notes": "HomeReady may still have minimum score requirements per program rules.",
         },
         "score_methodology": {
             "two_scores": "Use lower of two",
@@ -493,15 +498,16 @@ FANNIE_MAE = {
         "citation": "B2-2-04, Non-Occupant Borrowers",
     },
 
-    # ----- LOAN LIMITS (2024 baseline, update annually) -----
+    # ----- LOAN LIMITS (2026 baseline — updated per FHFA announcement) -----
     "loan_limits": {
-        "conforming_1_unit": 766550,
-        "conforming_2_unit": 981500,
-        "conforming_3_unit": 1186350,
-        "conforming_4_unit": 1474400,
-        "high_balance_1_unit": 1149825,
-        "citation": "FHFA Conforming Loan Limits",
-        "notes": "Limits adjusted annually. High-cost areas up to 150% of baseline.",
+        "conforming_1_unit": 806500,
+        "conforming_2_unit": 1032650,
+        "conforming_3_unit": 1248150,
+        "conforming_4_unit": 1551250,
+        "high_balance_1_unit": 1209750,
+        "citation": "FHFA 2026 Conforming Loan Limits; LL-2024-03",
+        "notes": "2026 limits. High-cost areas up to 150% of baseline. Updated annually by FHFA.",
+        "effective_date": "January 1, 2026",
     },
 }
 
@@ -637,9 +643,14 @@ FREDDIE_MAC = {
     },
 
     "credit_score": {
-        "lpa_minimum": {"min_score": 620, "citation": "Section 5201.1, Credit Score Requirements"},
+        "lpa_minimum": {"min_score": 620, "citation": "Section 5201.1, Credit Score Requirements",
+                        "notes": "Freddie Mac still requires 620 minimum (unlike Fannie Mae which removed the floor in Nov 2025)."},
         "manual_minimum": {"min_score": 620, "citation": "Section 5201.1"},
         "home_possible": {"min_score": 620, "citation": "Section 4501.8, Home Possible"},
+        "credit_score_model_update": {
+            "notes": "As of July 8, 2025, VantageScore 4.0 and Classic FICO via tri-merge are both permitted (per FHFA directive).",
+            "citation": "FHFA Credit Score Directive; Freddie Mac Guide updates 2025",
+        },
         "score_methodology": {
             "two_scores": "Use lower of two",
             "three_scores": "Use middle score",
@@ -691,13 +702,16 @@ FREDDIE_MAC = {
         "investment_2_4_unit": {"months": 6, "citation": "Section 5501.1"},
     },
 
+    # ----- LOAN LIMITS (2026 — per Bulletin 2025-16) -----
     "loan_limits": {
-        "conforming_1_unit": 766550,
-        "conforming_2_unit": 981500,
-        "conforming_3_unit": 1186350,
-        "conforming_4_unit": 1474400,
-        "high_balance_1_unit": 1149825,
-        "citation": "FHFA Conforming Loan Limits (same as Fannie Mae)",
+        "conforming_1_unit": 832750,
+        "conforming_2_unit": 1066050,
+        "conforming_3_unit": 1288500,
+        "conforming_4_unit": 1601050,
+        "high_balance_1_unit": 1249125,
+        "citation": "Bulletin 2025-16; FHFA 2026 Conforming Loan Limits",
+        "notes": "2026 limits effective Jan 1, 2026. +3.26% increase over 2025.",
+        "effective_date": "January 1, 2026",
     },
 
     # ----- STUDENT LOAN DTI TREATMENT -----
@@ -1065,14 +1079,18 @@ FHA = {
             "max_ltv": 96.5,
             "min_repair_cost": 5000,
             "max_repair_cost": "FHA loan limit for area",
+            "rehab_period_months": 12,
             "requires_consultant": True,
-            "citation": "HUD 4000.1, II.A.8.h, Section 203(k)",
+            "citation": "ML 2024-13; HUD 4000.1, II.A.8.h, Section 203(k)",
+            "notes": "Updated per ML 2024-13: rehab period extended to 12 months. Consultant fees may be financed.",
         },
         "fha_203k_limited": {
             "max_ltv": 96.5,
-            "max_repair_cost": 35000,
+            "max_repair_cost": 75000,
+            "rehab_period_months": 9,
             "requires_consultant": False,
-            "citation": "HUD 4000.1, II.A.8.h",
+            "citation": "ML 2024-13; HUD 4000.1, II.A.8.h (revised July 2024)",
+            "notes": "Updated per ML 2024-13: max rehab increased from $35,000 to $75,000; period extended from 6 to 9 months. Consultant fees may be financed.",
         },
         "streamline_refi": {
             "appraisal_required": False,
@@ -1083,11 +1101,13 @@ FHA = {
         },
     },
 
+    # ----- LOAN LIMITS (2026 — per ML 2025-23) -----
     "loan_limits": {
-        "floor_1_unit": 498257,
-        "ceiling_1_unit": 1149825,
-        "notes": "FHA limits are 65% of conforming limit (floor) to 150% (ceiling/high-cost)",
-        "citation": "HUD 4000.1, II.A.2, Annual FHA Loan Limits",
+        "floor_1_unit": 541287,
+        "ceiling_1_unit": 1249125,
+        "notes": "FHA limits: floor = 65% of conforming ($832,750), ceiling = 150%. Varies by county/MSA.",
+        "citation": "ML 2025-23; HUD 4000.1, II.A.2",
+        "effective_date": "January 1, 2026",
     },
 
     "occupancy": {
@@ -1352,7 +1372,8 @@ VA = {
         "cash_out_refi_subsequent": {"fee_pct": 3.30, "citation": "VA Pamphlet 26-7, Ch. 8"},
         "irrrl": {"fee_pct": 0.50, "citation": "VA Pamphlet 26-7, Ch. 8"},
         "reserves_national_guard": {
-            "notes": "Reservists/National Guard: add 0.15% to first-use rates (removed as of 2020 for most)",
+            "notes": "National Guard/Reservists now pay the SAME funding fee rates as active duty. The 0.15% surcharge was fully eliminated.",
+            "citation": "Blue Water Navy Vietnam Veterans Act of 2019; VA funding fee schedule updates",
         },
         "exempt_from_funding_fee": [
             "Veterans receiving VA disability compensation",
@@ -1361,6 +1382,8 @@ VA = {
             "Active duty Purple Heart recipients",
         ],
         "can_be_financed": True,
+        "tax_deductible": True,
+        "tax_deductible_notes": "Veterans can deduct the VA funding fee on their federal tax return (effective 2025).",
         "citation": "VA Pamphlet 26-7, Ch. 8",
     },
 
@@ -1436,7 +1459,10 @@ VA = {
         },
         "partial_entitlement": {
             "description": "County loan limits apply when partial entitlement used",
-            "citation": "VA Pamphlet 26-7, Ch. 3",
+            "baseline_limit_2026": 832750,
+            "high_cost_max_2026": 1299500,
+            "citation": "Circular 26-25-10; FHFA 2026 Limits",
+            "effective_date": "January 1, 2026",
         },
     },
 
