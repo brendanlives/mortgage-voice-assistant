@@ -689,7 +689,17 @@ def route_and_answer(query: str, rag_function=None) -> Dict[str, Any]:
         answer, citations = _execute_comparison(params, query)
         result["rule_engine_answer"] = answer
         result["citations"] = citations
-        result["combined_answer"] = answer
+
+        # COMPARISON + RAG for complex multi-topic questions
+        if classification.get("force_rag") and rag_function:
+            rag_answer = rag_function(query)
+            result["rag_answer"] = rag_answer
+            result["combined_answer"] = (
+                f"📊 DETERMINISTIC COMPARISON:\n{answer}\n\n"
+                f"📖 ADDITIONAL CONTEXT:\n{rag_answer}"
+            )
+        else:
+            result["combined_answer"] = answer
 
     elif route == ROUTE_HYBRID:
         # Rule engine first, then RAG for context
@@ -980,7 +990,13 @@ def _execute_rule_engine(rule_type: str, params: dict, query: str) -> Tuple[str,
 
 
 def _execute_comparison(params: dict, query: str) -> Tuple[str, List[str]]:
-    """Execute a cross-agency comparison."""
+    """Execute a cross-agency comparison WITH topic-specific rule handlers.
+
+    The generic compare_agencies_text() outputs LTV/DTI/score tables, but complex
+    comparison questions often involve specific topics (departure residence, gift funds,
+    co-borrower rules, derogatory events, borrower eligibility). This function detects
+    those topics in the query and appends the relevant deterministic data.
+    """
     scenario_kwargs = {}
     for key in ["transaction_type", "occupancy", "units", "rate_type", "credit_score",
                 "ltv", "dti", "loan_amount", "down_payment_pct", "loan_term_years",
@@ -990,7 +1006,127 @@ def _execute_comparison(params: dict, query: str) -> Tuple[str, List[str]]:
 
     scenario = LoanScenario(**scenario_kwargs)
     text = compare_agencies_text(scenario)
-    return text, []
+    all_citations = []
+
+    # ─── TOPIC DETECTION ────────────────────────────────────────────────
+    # Scan the query for topic-specific patterns and invoke those handlers
+    # alongside the generic comparison output.
+    # ─────────────────────────────────────────────────────────────────────
+    query_lower = query.lower()
+    topic_sections = []
+
+    # 1) Departure Residence
+    departure_patterns = [
+        r"(?:departure|departing)\s+(?:residence|property|home)",
+        r"(?:vacat|vacating|leaving)\s+(?:my\s+)?(?:current|primary|existing)\s+(?:home|house|residence|property)",
+        r"(?:current|existing|primary)\s+(?:home|house|residence|property)\s+.*(?:rent|vacat|move|leav|convert)",
+        r"(?:rent|rental\s+income)\s+.*(?:departure|departing|current\s+(?:home|house|residence)|vacating)",
+        r"(?:converting|convert)\s+(?:primary|my\s+(?:home|house))\s+(?:to\s+)?(?:rental|investment)",
+        r"(?:move\s+out|moving\s+out)\s+.*(?:rent|lease|current\s+home)",
+        r"(?:rent\s+(?:the\s+)?old\s+(?:one|house|home|property)|rent\s+(?:it\s+)?out)",
+    ]
+    if any(re.search(p, query_lower) for p in departure_patterns):
+        dep_answer, dep_cites = _execute_rule_engine("departure_residence", params, query)
+        topic_sections.append(("DEPARTURE RESIDENCE RULES", dep_answer))
+        all_citations.extend(dep_cites)
+
+    # 2) Derogatory Events (bankruptcy, foreclosure, short sale, deed-in-lieu)
+    derog_patterns = [
+        r"(?:bankruptcy|foreclosure|short\s+sale|deed.in.lieu)",
+        r"(?:chapter\s+(?:7|13))",
+        r"(?:waiting\s+period|how\s+long\s+(?:after|since))",
+    ]
+    if any(re.search(p, query_lower) for p in derog_patterns):
+        derog_answer, derog_cites = _execute_rule_engine("derogatory_event", params, query)
+        topic_sections.append(("DEROGATORY EVENT / WAITING PERIODS", derog_answer))
+        all_citations.extend(derog_cites)
+
+    # 3) Borrower Eligibility (visa, citizenship, non-citizen)
+    elig_patterns = [
+        r"(?:h1b|h-1b|l1|l-1|f1|f-1|opt|daca|visa)",
+        r"(?:non.citizen|non.permanent|citizen|green\s*card|immigrant|lawful)",
+        r"(?:eligible|eligib)\s+.*(?:borrower|non.citizen)",
+    ]
+    if any(re.search(p, query_lower) for p in elig_patterns):
+        # Check all mentioned agencies or default to all
+        agencies_to_check = []
+        for ag in ["Fannie Mae", "Freddie Mac", "FHA", "VA"]:
+            if ag.lower().replace(" ", "") in query_lower.replace(" ", ""):
+                agencies_to_check.append(ag)
+        if not agencies_to_check:
+            agencies_to_check = ["Fannie Mae", "Freddie Mac", "FHA", "VA"]
+
+        elig_lines = []
+        for ag in agencies_to_check:
+            ag_params = dict(params, agency=ag)
+            ea, ec = _execute_rule_engine("borrower_eligibility", ag_params, query)
+            elig_lines.append(ea)
+            all_citations.extend(ec)
+        topic_sections.append(("BORROWER ELIGIBILITY", "\n".join(elig_lines)))
+
+    # 4) Gift Funds / Foreign Gifts
+    gift_patterns = [
+        r"(?:gift|gifting|gifted)\s+.*(?:\$|\d+[kK]?\s)",
+        r"(?:\$\d+[kK]?\s+gift)",
+        r"(?:gift\s+(?:fund|money|from|of\s+equity))",
+        r"(?:foreign\s+(?:bank|statement|gift|asset))",
+        r"(?:(?:hindi|spanish|chinese|mandarin|japanese|korean)\s+.*(?:statement|document|bank))",
+        r"(?:(?:statement|document|bank)\s+.*(?:hindi|spanish|chinese|mandarin|japanese|korean))",
+    ]
+    if any(re.search(p, query_lower) for p in gift_patterns):
+        # Gift fund rules aren't a standalone handler yet — flag for RAG supplementation
+        topic_sections.append(("GIFT FUND NOTES",
+            "⚠️ Gift fund rules vary by agency. Key differences:\n"
+            "  • FHA: Family member = relative by blood, marriage, or law. Fiancé(e) IS eligible. Cousin IS family.\n"
+            "  • Fannie Mae: Broader donor definition includes employer, church, municipality, nonprofit.\n"
+            "  • Freddie Mac: Similar to Fannie but with specific documentation requirements.\n"
+            "  • VA: No restriction on gift donor relationship.\n"
+            "  • ALL AGENCIES: Foreign-currency gifts must be converted to USD before deposit. "
+            "Foreign-language bank statements require certified English translation."))
+
+    # 5) Non-Occupant Co-Borrower
+    coborrower_patterns = [
+        r"(?:co.sign|cosign|co.borrow|non.occupant|non.occupying)",
+        r"(?:coborrower|co.borrower)",
+        r"(?:cousin|friend|boss|employer|coworker)\s+.*(?:co.sign|cosign|on\s+the\s+loan)",
+    ]
+    if any(re.search(p, query_lower) for p in coborrower_patterns):
+        topic_sections.append(("NON-OCCUPANT CO-BORROWER RULES",
+            "⚠️ Non-occupant co-borrower rules by agency:\n"
+            "  • FHA: Must be US citizen or lawful permanent resident. Family member required "
+            "(HUD definition: spouse, parent, child, sibling, stepchild, aunt/uncle, grandparent, in-law). "
+            "Cousin is NOT family under HUD. Non-family NIC = max 75% LTV. Family NIC on 1-unit = 96.5% LTV.\n"
+            "  • Fannie Mae: No family relationship required. Max 95% LTV with NIC on 1-unit primary. "
+            "NIC cannot be used on investment properties.\n"
+            "  • Freddie Mac: No family relationship required for primary residence. "
+            "NIC not allowed on investment property.\n"
+            "  • VA: Joint loans with non-veteran, non-spouse = max 25% VA guaranty on veteran's portion only. "
+            "Civilian co-signers allowed but VA only guarantees the veteran's share."))
+
+    # 6) Asset Depletion Income
+    asset_patterns = [
+        r"(?:asset\s+depletion|deplet\w+\s+(?:income|asset))",
+        r"(?:401k|401\(k\)|ira|retirement\s+(?:account|fund|asset))\s+.*(?:income|qualify|use)",
+    ]
+    if any(re.search(p, query_lower) for p in asset_patterns):
+        topic_sections.append(("ASSET DEPLETION / ASSET DISSIPATION INCOME",
+            "⚠️ Asset depletion rules by agency:\n"
+            "  • Fannie Mae: YES — eligible retirement assets ÷ remaining loan term (months). "
+            "If borrower < 59½, subtract 10% early withdrawal penalty. Net assets × 70% if stocks/bonds. "
+            "Retirement accounts eligible (401k, IRA, etc.).\n"
+            "  • Freddie Mac: YES — similar to Fannie, called 'asset dissipation'. "
+            "Assets ÷ remaining term. Retirement accounts at 70% if under 59½.\n"
+            "  • FHA: NO — FHA does NOT allow asset depletion as qualifying income. "
+            "Assets can only be used for down payment and reserves.\n"
+            "  • VA: NO standard asset depletion method. VA evaluates residual income holistically."))
+
+    # Assemble final output
+    if topic_sections:
+        parts = [text, "\n" + "=" * 60 + "\nTOPIC-SPECIFIC RULES FOR THIS COMPARISON:\n" + "=" * 60]
+        for title, content in topic_sections:
+            parts.append(f"\n📋 {title}:\n{content}")
+        return "\n".join(parts), all_citations
+    return text, all_citations
 
 
 # =============================================================================
