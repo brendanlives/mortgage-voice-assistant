@@ -1,6 +1,6 @@
 # Mortgage Guideline AI — System Instructions
 
-> **Version:** 1.4 — March 29, 2026
+> **Version:** 1.5 — March 30, 2026
 > **Purpose:** Master instruction set for the AI powering the Movement Mortgage guideline assistant. This is a living document — update it as the rules system improves and as testing reveals new edge cases.
 
 ---
@@ -416,4 +416,6 @@ Politely redirect: *"That's outside the mortgage guidelines I have access to. I'
 | 1.1 | 2026-03-29 | **Four router fixes implemented.** (1) Definitional question routing — "What is X?" now routes HYBRID instead of RULE_ENGINE when X contains trigger keywords (fixes 9 terminology test failures). (2) Down payment parameter extraction — now parses "X% or more down" patterns for accurate VA funding fee lookups. (3) Derogatory event routing — bankruptcy/foreclosure/waiting period questions now route HYBRID with rule engine providing exact waiting period tables. (4) Policy question routing — "Can you...", "Is it possible to..." questions now route HYBRID instead of RULE_ENGINE. Added Section 2b (Policy Action Questions). Added derogatory event lookup to Section 3. Updated Section 8 (Waiting Periods). Updated Section 9 (Parameter Extraction). |
 | 1.0 | 2026-03-28 | Initial version. Built after 100-question test (99% pass) and 250-term terminology test (95.6% pass). Incorporates lessons from gift-of-equity routing fix, non-occupant co-borrower fix, FHA content field fix, and definitional question routing issue. |
 
-*Next planned updates: Add multi-turn conversation handling rules. Wire instructions into app.py system prompt.*
+| 1.5 | 2026-03-30 | **Wired into app.py system prompt.** Sections 8 (Critical Policy Updates) and 9 (Common Scenarios) are now loaded at startup and injected into the Claude system prompt as policy overrides. This ensures the LLM has access to critical policy updates (ML 2025-09, departure residence rules, gift fund rules, co-borrower classification) even when RAG retrieval misses them. Also fixed COMPARISON route to invoke topic-specific rule handlers — departure residence, derogatory events, borrower eligibility, gift funds, co-borrower, and asset depletion now get deterministic data appended to comparison output. |
+
+*Next planned updates: Add multi-turn conversation handling rules.*

@@ -87,6 +87,48 @@ def get_pinecone_index():
             print(f"Pinecone connection error: {e}")
     return pinecone_index
 
+
+# ── AI INSTRUCTIONS — POLICY OVERRIDES & SCENARIO GUIDANCE ───────────────────
+# Load AI_INSTRUCTIONS.md at startup and extract the critical policy sections
+# that help Claude synthesize multi-topic answers correctly. These override
+# stale RAG data and provide guidance for common complex scenarios.
+# ─────────────────────────────────────────────────────────────────────────────
+def _load_ai_instructions() -> str:
+    """Load AI_INSTRUCTIONS.md and extract sections 8-9 as a policy override block."""
+    instructions_path = os.path.join(os.path.dirname(__file__), "AI_INSTRUCTIONS.md")
+    try:
+        with open(instructions_path, "r") as f:
+            content = f.read()
+    except FileNotFoundError:
+        print("WARNING: AI_INSTRUCTIONS.md not found — policy overrides will not be injected")
+        return ""
+
+    # Extract sections 8 (Critical Policy Updates) through 9 (Common Scenarios)
+    # These are the sections that override stale RAG data and guide multi-topic synthesis
+    import re
+    sections = []
+
+    # Section 8: Critical Policy Updates
+    m8 = re.search(r"(## 8\. CRITICAL POLICY UPDATES.*?)(?=\n## \d+\.|\Z)", content, re.DOTALL)
+    if m8:
+        sections.append(m8.group(1).strip())
+
+    # Section 9: Common Scenarios (first instance — the scenario guidance, not parameter extraction)
+    m9 = re.search(r"(## 9\. COMMON SCENARIOS AND HOW TO HANDLE THEM.*?)(?=\n## 9\. PARAMETER|\n## \d+\.|\Z)", content, re.DOTALL)
+    if m9:
+        sections.append(m9.group(1).strip())
+
+    if sections:
+        block = "\n\n".join(sections)
+        print(f"Loaded AI_INSTRUCTIONS.md policy overrides ({len(block)} chars, {len(sections)} sections)")
+        return block
+    else:
+        print("WARNING: Could not extract policy sections from AI_INSTRUCTIONS.md")
+        return ""
+
+
+AI_POLICY_OVERRIDES = _load_ai_instructions()
+
 # Initialize on startup
 get_pinecone_index()
 
@@ -449,6 +491,20 @@ Format your response clearly:
 
     hybrid_addition = get_hybrid_system_prompt_addition() if rule_context else ""
 
+    # Build policy overrides block from AI_INSTRUCTIONS.md
+    policy_block = ""
+    if AI_POLICY_OVERRIDES:
+        policy_block = f"""
+═══════════════════════════════════════════════════════════════════════
+POLICY OVERRIDES & SCENARIO GUIDANCE (from AI_INSTRUCTIONS.md)
+═══════════════════════════════════════════════════════════════════════
+The following policy updates and scenario guidance OVERRIDE any conflicting
+information in the retrieved guideline passages. These reflect the most
+recent agency changes and common LO scenarios.
+
+{AI_POLICY_OVERRIDES}
+"""
+
     system_prompt = f"""You are Sarah, a senior mortgage underwriting assistant. You answer ONLY from
 the retrieved guideline passages below. You are a professional guideline interpreter, not a
 mortgage encyclopedia.
@@ -509,6 +565,7 @@ FORMAT:
 - Flag genuine red flags and areas requiring underwriter verification
 - When the question involves a complex scenario, provide a clear recommendation
   at the end with the best path forward
+{policy_block}
 {hybrid_addition}
 {voice_format}"""
 
@@ -969,6 +1026,20 @@ def api_ask_stream():
 
             hybrid_addition = get_hybrid_system_prompt_addition() if rule_context_block else ""
 
+            # Build policy overrides block from AI_INSTRUCTIONS.md
+            policy_block = ""
+            if AI_POLICY_OVERRIDES:
+                policy_block = f"""
+═══════════════════════════════════════════════════════════════════════
+POLICY OVERRIDES & SCENARIO GUIDANCE (from AI_INSTRUCTIONS.md)
+═══════════════════════════════════════════════════════════════════════
+The following policy updates and scenario guidance OVERRIDE any conflicting
+information in the retrieved guideline passages. These reflect the most
+recent agency changes and common LO scenarios.
+
+{AI_POLICY_OVERRIDES}
+"""
+
             voice_format = """
 Format your response clearly:
 - Lead with the key rule and any critical thresholds
@@ -1040,6 +1111,7 @@ TLDR REQUIREMENT:
 - Example: "TLDR: This borrower can likely qualify with Fannie Mae if they increase
   the down payment to 15%. The main issue is the 2-year employment gap — you'll need
   a solid LOE. Get the VOR from the previous landlord before submitting."
+{policy_block}
 {hybrid_addition}
 {voice_format}"""
 
