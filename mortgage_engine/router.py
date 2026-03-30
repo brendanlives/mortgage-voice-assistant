@@ -1011,9 +1011,16 @@ def _execute_comparison(params: dict, query: str) -> Tuple[str, List[str]]:
     # ─── TOPIC DETECTION ────────────────────────────────────────────────
     # Scan the query for topic-specific patterns and invoke those handlers
     # alongside the generic comparison output.
+    #
+    # IMPORTANT: For comparison questions, we strip the single "agency" param
+    # so that topic handlers compare ALL agencies (or at least all agencies
+    # mentioned in the query), rather than only the first agency matched.
     # ─────────────────────────────────────────────────────────────────────
     query_lower = query.lower()
     topic_sections = []
+
+    # Build comparison-aware params: remove single agency so handlers show all
+    comparison_params = {k: v for k, v in params.items() if k != "agency"}
 
     # 1) Departure Residence
     departure_patterns = [
@@ -1026,7 +1033,7 @@ def _execute_comparison(params: dict, query: str) -> Tuple[str, List[str]]:
         r"(?:rent\s+(?:the\s+)?old\s+(?:one|house|home|property)|rent\s+(?:it\s+)?out)",
     ]
     if any(re.search(p, query_lower) for p in departure_patterns):
-        dep_answer, dep_cites = _execute_rule_engine("departure_residence", params, query)
+        dep_answer, dep_cites = _execute_rule_engine("departure_residence", comparison_params, query)
         topic_sections.append(("DEPARTURE RESIDENCE RULES", dep_answer))
         all_citations.extend(dep_cites)
 
@@ -1037,7 +1044,7 @@ def _execute_comparison(params: dict, query: str) -> Tuple[str, List[str]]:
         r"(?:waiting\s+period|how\s+long\s+(?:after|since))",
     ]
     if any(re.search(p, query_lower) for p in derog_patterns):
-        derog_answer, derog_cites = _execute_rule_engine("derogatory_event", params, query)
+        derog_answer, derog_cites = _execute_rule_engine("derogatory_event", comparison_params, query)
         topic_sections.append(("DEROGATORY EVENT / WAITING PERIODS", derog_answer))
         all_citations.extend(derog_cites)
 
