@@ -1183,6 +1183,47 @@ STALE_TOPICS = [
         "replacement_source": "FHFA 2026 Conforming Loan Limit Announcement; ML 2025-23; Circular 26-25-10",
         "replacement_agency": "All Agencies",
     },
+    # --- ROUND 2: Additional corrections identified from LO review ---
+    {
+        "search_query": "departure residence departing primary vacating rental income lease security deposit Fannie Mae conventional",
+        "stale_keywords": ["security deposit"],
+        "reason": "Fannie Mae does NOT require security deposit for departure residence rental income. Requires lease + rent comp OR lease + 2 months bank statements.",
+        "replacement_text": "FANNIE MAE DEPARTURE RESIDENCE RENTAL INCOME: To count rental income from a departing primary residence, Fannie Mae requires EITHER: (1) executed lease agreement + comparable rent schedule (Form 1007), OR (2) executed lease agreement + 2 months most recent bank statements showing rent deposit history. Security deposit is NOT required. No equity requirement exists for departure residence rental income (unlike FHA which requires 25% equity). If no lease documentation, full PITIA counted as liability with zero rental offset. The 75% vacancy factor applies: 75% of gross rent minus PITIA = net rental income/loss.",
+        "replacement_source": "B3-3.1-08; B3-6-06",
+        "replacement_agency": "Fannie Mae",
+    },
+    {
+        "search_query": "FHA departure residence departing primary vacating rental income 25% equity requirement",
+        "stale_keywords": ["security deposit"],
+        "reason": "FHA departure residence rules are distinct from conventional - requires 25% equity",
+        "replacement_text": "FHA DEPARTURE RESIDENCE RENTAL INCOME (CRITICAL DIFFERENCE FROM CONVENTIONAL): FHA REQUIRES 25% documented equity in the departing primary residence before rental income can be used to offset the mortgage payment. If borrower has LESS than 25% equity, the full PITIA of the departure residence must be counted as a liability in DTI with ZERO rental income offset, EVEN IF the borrower has an executed lease. Exception: if borrower is relocating for employment (new job >100 miles from current residence), the 25% equity requirement may be waived. This is the single biggest difference between FHA and conventional on departure residences. Do NOT confuse this with the rules about having two FHA loans simultaneously (which is a separate issue).",
+        "replacement_source": "HUD 4000.1, II.A.4.c.ii(H); II.A.1.b.ii(B)",
+        "replacement_agency": "FHA",
+    },
+    {
+        "search_query": "gift funds donor bank statement documentation required ability to give",
+        "stale_keywords": ["donor bank statement showing withdrawal"],
+        "reason": "Donor bank statement is NOT always required - only when transfer cannot be verified otherwise",
+        "replacement_text": "GIFT FUND DOCUMENTATION (ALL AGENCIES): A gift letter signed by the donor is ALWAYS required (stating amount, donor name, relationship, property address, no repayment expected). HOWEVER, a donor bank statement is NOT universally required. Donor bank statements are only needed when the transfer of funds cannot be verified through other means (e.g., wire confirmation, cashier's check, or closing statement). DU/LPA do not universally require donor bank statements. The key requirement is evidence of transfer to the borrower or to escrow/closing. All gift funds must be in US dollars at closing. For foreign gifts, certified English translation of any foreign-language documents is required.",
+        "replacement_source": "B3-4.3-04; Section 5501.2; HUD 4000.1 II.A.4.d.iii",
+        "replacement_agency": "All Agencies",
+    },
+    {
+        "search_query": "Fannie Mae non-occupant co-borrower 2-unit maximum LTV 85%",
+        "stale_keywords": ["85%", "85"],
+        "reason": "Fannie Mae non-occ co-borrower LTV on 2-unit updated to 95% (Nov 2023 eligibility matrix update)",
+        "replacement_text": "FANNIE MAE NON-OCCUPANT CO-BORROWER LTV (Updated Nov 2023): Non-occupant co-borrowers are permitted on primary residence loans. Max LTV: 97% for 1-unit, 95% for 2-unit, 95% for 3-4 unit (with DU approval). No family relationship is required for non-occupant co-borrowers on conventional loans — any individual can co-sign. The co-borrower must sign the Note and be obligated on the mortgage. Their income can be used to qualify and their debts are included in combined DTI.",
+        "replacement_source": "B2-2-04; B2-1.1-01 (updated Nov 2023)",
+        "replacement_agency": "Fannie Mae",
+    },
+    {
+        "search_query": "FHA non-occupant co-borrower family member required cousin relationship 75%",
+        "stale_keywords": ["cousin"],
+        "reason": "Clarify FHA non-occ rules - both family and non-family allowed but at different LTV",
+        "replacement_text": "FHA NON-OCCUPANT CO-BORROWER RULES: FHA allows BOTH family AND non-family non-occupant co-borrowers. The critical difference is LTV: (1) Family member non-occ on 1-unit = standard 96.5% LTV. (2) Non-family non-occ on 1-unit = LTV capped at 75%. (3) ANY non-occ (family or not) on 2-4 unit = LTV capped at 75%. FHA family member definition: spouse, child, parent, grandparent, sibling (including step), aunt, uncle, niece, nephew, stepchild, stepparent, in-laws, domestic partner. IMPORTANT: Cousin is NOT explicitly listed in HUD's family member definition. If a cousin is used as non-occ co-borrower on FHA, the LTV may be limited to 75%.",
+        "replacement_source": "HUD 4000.1, II.A.2.a",
+        "replacement_agency": "FHA",
+    },
 ]
 
 

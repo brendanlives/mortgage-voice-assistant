@@ -315,12 +315,29 @@ FANNIE_MAE = {
         "ltv_gt_80_2_4_unit": {"min_own_funds": "5%", "gift_for_remainder": True, "citation": "B3-4.3-04"},
     },
     "gift_funds": {
-        "eligible_donors": ["relative", "domestic partner", "fiance", "employer", "labor union", "government entity", "nonprofit"],
-        "ineligible_donors": ["interested party (seller, builder, real estate agent)", "any person with financial interest in the transaction"],
-        "documentation_required": ["gift letter (amount, donor, relationship, no repayment)", "donor bank statement showing withdrawal", "borrower bank statement showing deposit"],
+        "eligible_donors": [
+            "relative (by blood, marriage, adoption, or legal guardianship)",
+            "domestic partner",
+            "fiance/fiancee",
+            "former relative (ex-spouse, ex-in-law, godparent, etc.)",
+            "child's other parent (unmarried)",
+            "employer or labor union",
+            "government entity or public agency",
+            "nonprofit or community lending organization",
+        ],
+        "ineligible_donors": ["interested party (seller, builder, real estate agent, loan officer)", "any person with financial interest in the transaction"],
+        "documentation_required": {
+            "always_required": ["gift letter signed by donor (amount, donor name, relationship, property address, statement no repayment expected)"],
+            "transfer_evidence": "Evidence of transfer to borrower OR evidence gift deposited to closing/escrow agent",
+            "donor_bank_statement": "NOT always required — only needed if lender cannot verify transfer through other means (e.g., wire confirmation, cashier's check copy). DU does NOT universally require donor bank statements.",
+            "borrower_bank_statement": "Needed to show deposit if gift already transferred to borrower's account",
+        },
+        "gift_must_be_in_us_dollars": True,
+        "gift_currency_note": "Gift funds must be in US dollars at the time of closing. If originating in foreign currency, must be converted to USD and conversion documented.",
         "foreign_gifts": {
             "allowed": True,
-            "additional_docs": ["wire transfer confirmation", "donor bank statement from foreign bank", "currency conversion documentation"],
+            "additional_docs": ["wire transfer confirmation showing USD amount received", "currency conversion documentation if applicable"],
+            "note": "Donor bank statement from foreign bank may be needed if transfer trail is unclear. Must be translated to English by certified translator if in foreign language.",
             "citation": "B3-4.3-04",
         },
         "citation": "B3-4.3-04, Gift Fund Requirements",
@@ -408,10 +425,15 @@ FANNIE_MAE = {
         "departure_residence": {
             "definition": "Current primary residence being vacated/converted to rental",
             "rental_income_allowed": True,
-            "requirements": ["executed lease agreement for the departure property", "evidence of security deposit"],
+            "documentation_options": [
+                "Option 1: Executed lease agreement + comparable rent schedule (Form 1007 or market rent analysis)",
+                "Option 2: Executed lease agreement + 2 months most recent bank statements showing rent deposits",
+            ],
+            "security_deposit_NOT_required": "Fannie Mae does NOT require evidence of security deposit — this is a common misconception",
             "factor": 0.75,
-            "formula": "75% of gross rent minus full PITIA on departure residence",
+            "formula": "75% of gross rent from lease minus full PITIA on departure residence = net rental income/loss",
             "if_no_lease": "Full PITIA of departure residence counted as liability with zero rental offset",
+            "equity_requirement": "None — Fannie Mae does NOT require minimum equity in the departure residence to use rental income (unlike FHA)",
             "citation": "B3-3.1-08, Rental Income; B3-6-06, Qualifying Impact of Other Real Estate Owned",
         },
         "asset_depletion_income": {
@@ -490,12 +512,14 @@ FANNIE_MAE = {
     "non_occupant_coborrower": {
         "allowed": True,
         "max_ltv_1_unit": 97,
-        "max_ltv_2_unit": 85,
-        "max_ltv_investment": "Not applicable (non-occ co-borrower only for primary)",
+        "max_ltv_2_unit": 95,
+        "max_ltv_3_4_unit": 95,
+        "max_ltv_investment": "Not applicable (non-occ co-borrower only for primary residence)",
         "income_can_be_used": True,
         "must_be_on_title": True,
-        "relationship_requirement": "None (any individual)",
-        "citation": "B2-2-04, Non-Occupant Borrowers",
+        "relationship_requirement": "None — any individual can be a non-occupant co-borrower on conventional loans. No family relationship required.",
+        "notes": "Non-occ co-borrower must sign the Note and be obligated on the mortgage. Their debts are included in DTI. DU will evaluate the combined risk profile.",
+        "citation": "B2-2-04, Non-Occupant Borrowers; B2-1.1-01 Eligibility Matrix (updated Nov 2023)",
     },
 
     # ----- LOAN LIMITS (2026 baseline — updated per FHFA announcement) -----
@@ -750,9 +774,22 @@ FREDDIE_MAC = {
 
     # ----- GIFT FUNDS -----
     "gift_funds": {
-        "eligible_donors": ["relative", "domestic partner", "employer", "government entity", "nonprofit"],
-        "documentation_required": ["gift letter", "donor bank statement", "borrower bank statement showing deposit"],
-        "foreign_gifts": {"allowed": True, "additional_docs": ["wire transfer", "foreign bank statement", "currency conversion docs"]},
+        "eligible_donors": [
+            "relative (by blood, marriage, adoption, foster, or legal guardianship)",
+            "domestic partner",
+            "individual related to borrower by blood, marriage, adoption, or legal guardianship",
+            "fiance/fiancee",
+            "employer or labor union",
+            "government entity or public agency",
+            "nonprofit organization",
+        ],
+        "documentation_required": {
+            "always_required": ["gift letter (amount, donor, relationship, no repayment statement)"],
+            "transfer_evidence": "Evidence of transfer (wire confirmation, cancelled check, closing statement showing gift)",
+            "donor_bank_statement": "NOT universally required — only if transfer cannot be verified by other documentation",
+        },
+        "gift_must_be_in_us_dollars": True,
+        "foreign_gifts": {"allowed": True, "additional_docs": ["wire transfer confirmation in USD", "currency conversion documentation if applicable"], "note": "Foreign-language documents must be accompanied by certified English translation"},
         "citation": "Section 5501.2, Gift Funds",
     },
 
@@ -820,10 +857,15 @@ FREDDIE_MAC = {
         },
         "departure_residence": {
             "rental_income_allowed": True,
-            "requirements": ["executed lease agreement", "evidence of security deposit"],
+            "documentation_options": [
+                "Option 1: Executed lease agreement + comparable rent schedule or market rent analysis",
+                "Option 2: Executed lease agreement + 2 months bank statements showing rent deposits",
+            ],
+            "security_deposit_NOT_required": "Freddie Mac does NOT require evidence of security deposit for departure residence rental income",
             "factor": 0.75,
-            "formula": "75% of gross rent minus full PITIA",
-            "if_no_lease": "Full PITIA counted as liability with zero offset",
+            "formula": "75% of gross rent minus full PITIA = net rental income/loss",
+            "if_no_lease": "Full PITIA counted as liability with zero rental offset",
+            "equity_requirement": "None — Freddie Mac does NOT require minimum equity in departure residence to use rental income",
             "citation": "Section 5306.1; Section 5501.1",
         },
         "asset_depletion_income": {
@@ -869,9 +911,12 @@ FREDDIE_MAC = {
     "non_occupant_coborrower": {
         "allowed": True,
         "max_ltv_1_unit": 95,
-        "max_ltv_2_unit": 85,
+        "max_ltv_2_unit": 95,
+        "max_ltv_3_4_unit": 95,
         "income_can_be_used": True,
-        "citation": "Section 4201.17, Non-Occupant Borrowers",
+        "relationship_requirement": "None — any individual can be non-occupant co-borrower on Freddie Mac loans. No family relationship required.",
+        "manual_underwriting_limits": "For manually underwritten loans with non-occupying borrowers: occupant borrower housing ratio max 35%, DTI max 43%",
+        "citation": "Section 4201.17, Non-Occupant Borrowers; Section 4201.4 (updated Sep 2025)",
     },
 }
 
@@ -1154,14 +1199,32 @@ FHA = {
 
     # ----- GIFT FUNDS -----
     "gift_funds": {
-        "eligible_donors": ["family member", "employer", "labor union", "close friend (with LOE)", "government agency", "nonprofit"],
-        "min_borrower_own_funds": "None for FHA — 100% of down payment can be gift",
+        "eligible_donors": [
+            "family member (spouse, child, parent, grandparent, sibling, aunt, uncle, stepchild, step-parent, in-law, domestic partner)",
+            "employer or labor union",
+            "close friend with documented and verified interest in the borrower (LOE required explaining relationship and reason for gift)",
+            "charitable organization / nonprofit",
+            "government agency or public entity",
+        ],
+        "fha_family_member_definition": "Spouse, child, parent, grandparent, sibling (including step-siblings), aunt, uncle, niece, nephew, stepchild, stepparent, in-laws, domestic partner. NOTE: Cousin is NOT explicitly listed as FHA family member.",
+        "min_borrower_own_funds": "None for FHA — 100% of down payment can be gift from eligible donor",
         "interested_party_contributions": {
             "ltv_gt_90": {"max_pct": 6, "citation": "HUD 4000.1, II.A.4.d.iii"},
             "ltv_lte_90": {"max_pct": 6, "citation": "HUD 4000.1, II.A.4.d.iii"},
         },
-        "documentation_required": ["gift letter", "donor bank statement", "transfer evidence"],
-        "foreign_gifts": {"allowed": True, "additional_docs": ["wire transfer", "foreign bank statement", "currency conversion"]},
+        "documentation_required": {
+            "always_required": ["gift letter (donor name, amount, relationship, property address, statement no repayment expected, donor signature)"],
+            "transfer_evidence": "Evidence of transfer to borrower or escrow/title company",
+            "donor_bank_statement": "Required when donor's ability to provide the gift cannot be verified through other means (e.g., if large gift and transfer trail is unclear). Not required in every scenario — for example, if gift is documented at closing via cashier's check with clear paper trail.",
+        },
+        "gift_must_be_in_us_dollars": True,
+        "gift_currency_note": "All gift funds must be in US dollars at closing. International wire transfers must show USD conversion.",
+        "foreign_gifts": {
+            "allowed": True,
+            "additional_docs": ["international wire transfer confirmation showing USD received", "currency conversion documentation"],
+            "foreign_language_docs": "All non-English documents MUST be accompanied by certified English translation per HUD 4000.1",
+            "citation": "HUD 4000.1, II.A.4.d.iii",
+        },
         "citation": "HUD 4000.1, II.A.4.d.iii, Gift Funds",
     },
 
@@ -1227,11 +1290,22 @@ FHA = {
         },
         "departure_residence": {
             "rental_income_allowed": True,
-            "requirements": ["executed lease agreement", "security deposit evidence"],
-            "factor": 0.75,
-            "formula": "75% of gross rent minus full PITIA",
-            "if_no_lease": "Full PITIA counted as liability",
-            "citation": "HUD 4000.1, II.A.4.c.ii(H)",
+            "critical_rule": "FHA does NOT allow rental income from a departing primary residence to offset the mortgage payment UNLESS the borrower has 25% documented equity in that property.",
+            "equity_requirement": "25% equity required (based on current appraised value or BPO minus outstanding mortgage balance). This is the key difference from conventional — Fannie/Freddie have NO equity requirement.",
+            "if_25pct_equity_met": {
+                "rental_income_can_offset": True,
+                "documentation": ["executed lease agreement", "evidence of rental deposits or rent comp"],
+                "factor": 0.75,
+                "formula": "75% of gross rent minus full PITIA = net rental income/loss",
+            },
+            "if_25pct_equity_NOT_met": {
+                "rental_income_can_offset": False,
+                "result": "Full PITIA of departure residence counted as liability in DTI with ZERO rental income offset, even if borrower has an executed lease",
+                "this_is_common_mistake": "Many LOs incorrectly apply conventional departure residence rules to FHA. FHA requires the 25% equity threshold.",
+            },
+            "relocating_for_employment": "If borrower is relocating for employment (new job > 100 miles from current residence), the 25% equity requirement may be waived per FHA guidelines. Documentation of relocation required.",
+            "second_fha_loan_rules": "This is separate from the rules about having two FHA loans simultaneously. A borrower can only have one FHA loan at a time unless relocating for employment (100+ miles) or the departing home has >=25% equity. Do NOT conflate departure residence rental income rules with second FHA mortgage rules.",
+            "citation": "HUD 4000.1, II.A.4.c.ii(H); HUD 4000.1, II.A.1.b.ii(B), Multiple FHA Loans",
         },
         "asset_depletion_income": {
             "allowed": False,
@@ -1278,10 +1352,20 @@ FHA = {
     # ----- NON-OCCUPANT CO-BORROWER -----
     "non_occupant_coborrower": {
         "allowed": True,
-        "max_ltv_1_unit_family": 96.5,
-        "max_ltv_1_unit_non_family": 75,
-        "max_ltv_2_4_unit": 75,
-        "relationship_for_high_ltv": "Family member only for 96.5% LTV",
+        "family_member_non_occ": {
+            "1_unit_max_ltv": 96.5,
+            "notes": "Family member non-occupant co-borrower on 1-unit: standard FHA LTV of 96.5% applies",
+        },
+        "non_family_non_occ": {
+            "1_unit_max_ltv": 75,
+            "notes": "Non-family non-occupant co-borrower on 1-unit: LTV capped at 75%. This is the penalty for using a non-family co-signer on FHA.",
+        },
+        "multi_unit_non_occ": {
+            "2_4_unit_max_ltv": 75,
+            "notes": "Any non-occupant co-borrower (family or not) on 2-4 unit: LTV capped at 75%",
+        },
+        "key_takeaway": "FHA allows BOTH family AND non-family non-occupant co-borrowers. The difference is LTV: family gets full 96.5% on 1-unit, non-family gets capped at 75%. On 2-4 units, everyone is capped at 75% regardless of relationship.",
+        "fha_family_definition_for_non_occ": "Same as gift donor family definition: spouse, child, parent, grandparent, sibling, stepchild, etc. Cousin is NOT explicitly listed.",
         "identity_of_interest": {
             "max_ltv": 85,
             "exceptions": ["family member purchasing primary residence", "tenant purchasing unit they rent"],
@@ -1300,6 +1384,25 @@ VA = {
     "agency": "VA",
     "agency_code": "VA",
     "source": "VA Pamphlet 26-7, VA Lender's Handbook",
+
+    # ----- BORROWER ELIGIBILITY -----
+    "borrower_eligibility": {
+        "eligible_veterans": [
+            "Active duty service member (after minimum service requirement)",
+            "Veteran with honorable or general discharge",
+            "National Guard or Reserve member (6+ years of service or called to active duty)",
+            "Surviving spouse of veteran who died in service or from service-connected disability (unremarried, or remarried after age 57)",
+        ],
+        "critical_note_on_assumptions": "Do NOT assume the borrower is the veteran. The borrower could be the veteran's spouse, a surviving spouse, or a co-borrower. Always clarify. A civilian spouse alone cannot use VA entitlement — only the veteran or surviving spouse has the entitlement.",
+        "spouse_on_loan": {
+            "veteran_spouse_as_coborrower": "Veteran's spouse CAN be on the loan as co-borrower. Spouse does NOT need to be a veteran.",
+            "spouse_only_as_borrower": "A non-veteran spouse CANNOT use the veteran's entitlement alone — the veteran must be on the loan.",
+            "surviving_spouse": "Unremarried surviving spouse of veteran who died in service or from service-connected disability IS eligible for VA loan on their own.",
+        },
+        "citizenship": "VA does not require U.S. citizenship. Legal residency not strictly required — eligibility is based on military service, not immigration status. An H1B holder who served in the U.S. military could be VA eligible.",
+        "certificate_of_eligibility": "COE (Certificate of Eligibility) is required to verify entitlement and service history",
+        "citation": "VA Pamphlet 26-7, Ch. 3; 38 USC 3702",
+    },
 
     "ltv_matrix": {
         "purchase": {
@@ -1564,9 +1667,11 @@ VA = {
         },
         "departure_residence": {
             "rental_income_allowed": True,
-            "requirements": ["executed lease", "security deposit evidence"],
+            "documentation": ["executed lease agreement", "rent comp or comparable rent schedule (no security deposit required)"],
             "factor": 0.75,
-            "formula": "75% of gross rent minus full PITIA",
+            "formula": "75% of gross rent minus full PITIA = net rental income/loss",
+            "if_no_lease": "Full PITIA counted as liability with zero offset",
+            "equity_requirement": "None — VA does not require minimum equity in departure residence to count rental income (unlike FHA which requires 25%)",
             "citation": "VA Pamphlet 26-7, Ch. 4",
         },
         "military_income": {
@@ -1638,9 +1743,10 @@ VA = {
 
     # ----- NON-OCCUPANT CO-BORROWER -----
     "non_occupant_coborrower": {
-        "allowed": "Only spouse or another eligible veteran",
-        "civilian_non_occupant": "Not allowed on VA loans",
-        "citation": "VA Pamphlet 26-7, Ch. 3",
+        "allowed": "Very limited — only veteran's spouse or another eligible veteran can be co-borrower",
+        "civilian_non_occupant": "A civilian non-veteran (like a cousin, parent, friend) CANNOT co-sign or be a non-occupant co-borrower on a VA loan. This is a key difference from conventional and FHA.",
+        "joint_loan_with_non_veteran": "VA does allow a joint loan with a non-veteran, but the VA guaranty only covers the veteran's portion, resulting in a lower guaranty percentage and potentially requiring a down payment on the non-veteran's share.",
+        "citation": "VA Pamphlet 26-7, Ch. 3; 38 USC 3710",
     },
 }
 
@@ -1736,7 +1842,10 @@ RENTAL_INCOME_RULES = {
     },
     "departure_residence": {
         "rule": "Primary residence being vacated can be counted as rental IF executed lease is provided",
-        "with_lease": "75% of gross rent minus PITIA = net rental offset",
+        "conventional_docs": "Lease + rent comp OR lease + 2 months bank statements showing rent deposits. NO security deposit required. NO equity requirement.",
+        "fha_special_rule": "FHA REQUIRES 25% equity in departure residence to count rental income. If <25% equity, full PITIA is liability with ZERO rental offset even with a lease. Exception: 100+ mile relocation for employment.",
+        "va_docs": "Lease + rent comp. No equity requirement.",
+        "with_lease_and_docs": "75% of gross rent minus PITIA = net rental offset",
         "without_lease": "Full PITIA counted as liability with ZERO rental income offset",
     },
     "fha_self_sufficiency": {
