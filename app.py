@@ -1120,6 +1120,147 @@ def status():
     })
 
 
+
+
+# ── ADMIN: PINECONE KNOWLEDGE BASE CLEANUP ─────────────────────────────────────
+# One-time endpoint to find and replace stale/outdated chunks in Pinecone.
+# Call POST /api/admin/cleanup-stale-chunks to execute.
+
+STALE_TOPICS = [
+    {
+        "search_query": "FHA non-permanent resident alien eligible H1B visa EAD employment authorization",
+        "stale_keywords": ["non-permanent resident", "employment authorization document", "ead", "eligible alien"],
+        "reason": "ML 2025-09 removed non-permanent resident alien eligibility effective May 25, 2025",
+        "replacement_text": "FHA BORROWER ELIGIBILITY UPDATE (Mortgagee Letter 2025-09, effective May 25, 2025): Non-permanent resident aliens (including H1B, L1, F1, OPT, DACA holders) are NO LONGER ELIGIBLE for FHA-insured loans. Only U.S. citizens, lawful permanent residents (green card holders), and citizens of Federated States of Micronesia, Republic of Marshall Islands, and Republic of Palau are eligible. Social Security cards alone are insufficient to prove immigration status; USCIS documentation is required. This supersedes all prior FHA guidance on non-permanent resident alien eligibility.",
+        "replacement_source": "ML 2025-09; HUD 4000.1 (revised May 2025)",
+        "replacement_agency": "FHA",
+    },
+    {
+        "search_query": "FHA student loan deferred IBR income driven repayment 1% balance calculation",
+        "stale_keywords": ["1% of", "one percent of", "1 percent"],
+        "reason": "ML 2021-13 changed FHA student loan calc from 1% to 0.5%",
+        "replacement_text": "FHA STUDENT LOAN DTI CALCULATION (Updated per ML 2021-13, effective August 16, 2021): For student loans in deferment, forbearance, or income-based repayment (IBR/IDR/PAYE): use 0.5% of the outstanding balance OR the actual documented monthly payment, whichever is greater. If the IBR/IDR payment is $0, use 0.5% of the outstanding balance (cannot use $0). For student loans in standard repayment, use the actual monthly payment from the credit report. This supersedes the prior 1% calculation rule.",
+        "replacement_source": "ML 2021-13; HUD 4000.1, II.A.4.c.ii(E) (revised)",
+        "replacement_agency": "FHA",
+    },
+    {
+        "search_query": "Fannie Mae 2-unit 3-unit 4-unit multi-unit primary purchase LTV maximum 85% 75%",
+        "stale_keywords": ["85%", "75%"],
+        "reason": "Fannie Mae increased 2-4 unit primary LTV to 95% in Nov 2023",
+        "replacement_text": "FANNIE MAE MULTI-UNIT PRIMARY RESIDENCE LTV LIMITS (Updated November 18, 2023): For purchase and rate/term refinance transactions on owner-occupied 2-4 unit properties with DU approval: Maximum LTV/CLTV is 95% for all unit counts (2-unit, 3-unit, and 4-unit). This is an increase from the prior limits of 85% (2-unit) and 75% (3-4 unit). Manual underwriting retains the prior lower limits. High-balance loans are excluded from this increase. Investment property limits unchanged (85% 1-unit, 75% 2-4 unit).",
+        "replacement_source": "B2-1.1-01, Eligibility Matrix (updated Nov 2023)",
+        "replacement_agency": "Fannie Mae",
+    },
+    {
+        "search_query": "Freddie Mac 2-unit 3-unit 4-unit multi-unit primary purchase LTV maximum 85% 80% 75%",
+        "stale_keywords": ["80%", "75%"],
+        "reason": "Freddie Mac increased 2-4 unit primary LTV to 95% in Sep 2025",
+        "replacement_text": "FREDDIE MAC MULTI-UNIT PRIMARY RESIDENCE LTV LIMITS (Updated September 29, 2025): For purchase and rate/term refinance transactions on owner-occupied 2-4 unit properties with LPA approval: Maximum LTV/CLTV is 95% for all unit counts (2-unit, 3-unit, and 4-unit). This is an increase from prior limits of 85%/95% (2-unit) and 80%/75% (3-4 unit). Investment property limits unchanged (85% 1-unit, 75% 2-4 unit).",
+        "replacement_source": "Section 4201.4 (updated Sep 2025)",
+        "replacement_agency": "Freddie Mac",
+    },
+    {
+        "search_query": "Fannie Mae minimum credit score 620 required DU Desktop Underwriter",
+        "stale_keywords": ["620", "minimum credit score"],
+        "reason": "SEL-2025-09 removed the 620 credit score floor for DU loans",
+        "replacement_text": "FANNIE MAE CREDIT SCORE REQUIREMENTS (Updated per SEL-2025-09, effective November 16, 2025): Fannie Mae NO LONGER requires a minimum 620 credit score for DU-approved loans. Desktop Underwriter now performs a comprehensive risk analysis without a hard credit score floor. Manual underwriting still requires a minimum 620 representative credit score. Individual lenders may continue to impose their own overlay minimums (commonly 620-640). This change allows DU to approve borrowers with lower scores when other risk factors are strong.",
+        "replacement_source": "SEL-2025-09; B3-5.1-01 (revised Nov 2025)",
+        "replacement_agency": "Fannie Mae",
+    },
+    {
+        "search_query": "FHA 203k limited repair rehabilitation maximum cost $35,000 35000",
+        "stale_keywords": ["35,000", "35000", "$35,000"],
+        "reason": "ML 2024-13 increased Limited 203k max from $35k to $75k",
+        "replacement_text": "FHA 203(K) REHABILITATION PROGRAM UPDATES (Per ML 2024-13, effective November 4, 2024): LIMITED 203(k): Maximum rehabilitation cost increased to $75,000 (from $35,000). Rehabilitation period extended to 9 months (from 6 months). Consultant fees may now be financed. STANDARD 203(k): Minimum repair cost remains $5,000. Maximum is the FHA loan limit for the area. Rehabilitation period extended to 12 months. HUD 203(k) consultant is required for Standard but optional for Limited.",
+        "replacement_source": "ML 2024-13; HUD 4000.1, II.A.8.h (revised Nov 2024)",
+        "replacement_agency": "FHA",
+    },
+    {
+        "search_query": "conforming loan limit 2024 2025 766550 806500 Fannie Freddie conventional",
+        "stale_keywords": ["766,550", "766550", "806,500", "806500", "$766,550", "$806,500"],
+        "reason": "2026 conforming loan limits are now in effect",
+        "replacement_text": "2026 CONFORMING LOAN LIMITS (Effective January 1, 2026, per FHFA): Fannie Mae/Freddie Mac baseline conforming limit: 1-unit $832,750, 2-unit $1,066,250, 3-unit $1,288,800, 4-unit $1,601,750. High-cost area ceiling: $1,249,125 (150% of baseline). FHA floor: $541,287 (65% of $832,750). FHA ceiling: $1,249,125. VA: $832,750 baseline (partial entitlement); no limit for full entitlement veterans. Limits vary by county/MSA for FHA.",
+        "replacement_source": "FHFA 2026 Conforming Loan Limit Announcement; ML 2025-23; Circular 26-25-10",
+        "replacement_agency": "All Agencies",
+    },
+]
+
+
+@app.route("/api/admin/cleanup-stale-chunks", methods=["POST"])
+def cleanup_stale_chunks():
+    """Find and replace outdated Pinecone chunks with corrected versions."""
+    index = get_pinecone_index()
+    if not index:
+        return jsonify({"error": "Pinecone not connected"}), 500
+
+    results = {"deleted": [], "upserted": [], "errors": []}
+
+    for topic in STALE_TOPICS:
+        try:
+            # Search for potentially stale chunks
+            embedding = embed_query(topic["search_query"])
+            if not embedding:
+                results["errors"].append(f"Could not embed query for: {topic['reason']}")
+                continue
+
+            matches = index.query(
+                vector=embedding,
+                top_k=10,
+                include_metadata=True
+            )
+
+            # Check each match for stale keywords
+            stale_ids = []
+            for match in matches.get("matches", []):
+                content = match.get("metadata", {}).get("content", "").lower()
+                text = match.get("metadata", {}).get("text", "").lower()
+                full_text = content + " " + text
+                # Check if any stale keyword appears
+                if any(kw.lower() in full_text for kw in topic["stale_keywords"]):
+                    stale_ids.append(match["id"])
+
+            # Delete stale chunks
+            if stale_ids:
+                index.delete(ids=stale_ids)
+                results["deleted"].extend([{
+                    "id": sid,
+                    "reason": topic["reason"]
+                } for sid in stale_ids])
+
+            # Upsert replacement chunk
+            replacement_id = f"corrected_{topic['replacement_agency'].lower().replace(' ', '_')}_{hash(topic['replacement_text']) % 100000}"
+            replacement_embedding = embed_query(topic["replacement_text"])
+            if replacement_embedding:
+                index.upsert(vectors=[{
+                    "id": replacement_id,
+                    "values": replacement_embedding,
+                    "metadata": {
+                        "text": topic["replacement_text"],
+                        "content": topic["replacement_text"],
+                        "source": topic["replacement_source"],
+                        "agency": topic["replacement_agency"],
+                        "type": "corrected_guideline",
+                        "corrected_date": "2026-03-29",
+                    }
+                }])
+                results["upserted"].append({
+                    "id": replacement_id,
+                    "agency": topic["replacement_agency"],
+                    "reason": topic["reason"],
+                })
+
+        except Exception as e:
+            results["errors"].append(f"Error processing '{topic['reason']}': {str(e)}")
+
+    return jsonify({
+        "status": "complete",
+        "deleted_count": len(results["deleted"]),
+        "upserted_count": len(results["upserted"]),
+        "error_count": len(results["errors"]),
+        "details": results,
+    })
+
+
 # -- INCOME WORKBOOK FILLER -------------------------------------------------
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'static', 'income_workbook_template.xlsm')
 

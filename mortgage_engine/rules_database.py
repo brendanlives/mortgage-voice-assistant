@@ -31,12 +31,12 @@ FANNIE_MAE = {
                     "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01, Eligibility Matrix"},
                 },
                 "2_unit": {
-                    "fixed": {"max_ltv": 85, "max_cltv": 85, "citation": "B2-1.1-01, Eligibility Matrix"},
-                    "arm":   {"max_ltv": 85, "max_cltv": 85, "citation": "B2-1.1-01, Eligibility Matrix"},
+                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01, Eligibility Matrix (updated Nov 2023)", "notes": "Increased from 85% to 95% for DU loans. Manual max 85%. Not for high-balance."},
+                    "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01, Eligibility Matrix (updated Nov 2023)"},
                 },
                 "3_4_unit": {
-                    "fixed": {"max_ltv": 75, "max_cltv": 75, "citation": "B2-1.1-01, Eligibility Matrix"},
-                    "arm":   {"max_ltv": 75, "max_cltv": 75, "citation": "B2-1.1-01, Eligibility Matrix"},
+                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01, Eligibility Matrix (updated Nov 2023)", "notes": "Increased from 75% to 95% for DU loans. Manual max 75%. Not for high-balance."},
+                    "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01, Eligibility Matrix (updated Nov 2023)"},
                 },
                 "condo": {
                     "fixed": {"max_ltv": 97, "max_cltv": 97, "citation": "B4-2.1-01, Condo Eligibility"},
@@ -71,12 +71,12 @@ FANNIE_MAE = {
                     "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01"},
                 },
                 "2_unit": {
-                    "fixed": {"max_ltv": 85, "max_cltv": 85, "citation": "B2-1.1-01"},
-                    "arm":   {"max_ltv": 85, "max_cltv": 85, "citation": "B2-1.1-01"},
+                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01 (updated Nov 2023)", "notes": "Increased from 85% to 95% for DU loans"},
+                    "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01 (updated Nov 2023)"},
                 },
                 "3_4_unit": {
-                    "fixed": {"max_ltv": 75, "max_cltv": 75, "citation": "B2-1.1-01"},
-                    "arm":   {"max_ltv": 75, "max_cltv": 75, "citation": "B2-1.1-01"},
+                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01 (updated Nov 2023)", "notes": "Increased from 75% to 95% for DU loans"},
+                    "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "B2-1.1-01 (updated Nov 2023)"},
                 },
             },
             "second_home": {
@@ -500,13 +500,13 @@ FANNIE_MAE = {
 
     # ----- LOAN LIMITS (2026 baseline — updated per FHFA announcement) -----
     "loan_limits": {
-        "conforming_1_unit": 806500,
-        "conforming_2_unit": 1032650,
-        "conforming_3_unit": 1248150,
-        "conforming_4_unit": 1551250,
-        "high_balance_1_unit": 1209750,
-        "citation": "FHFA 2026 Conforming Loan Limits; LL-2024-03",
-        "notes": "2026 limits. High-cost areas up to 150% of baseline. Updated annually by FHFA.",
+        "conforming_1_unit": 832750,
+        "conforming_2_unit": 1066250,
+        "conforming_3_unit": 1288800,
+        "conforming_4_unit": 1601750,
+        "high_balance_1_unit": 1249125,
+        "citation": "FHFA 2026 Conforming Loan Limits",
+        "notes": "2026 limits effective Jan 1, 2026. High-cost areas up to 150% of baseline ($1,249,125). Updated annually by FHFA.",
         "effective_date": "January 1, 2026",
     },
 }
@@ -529,12 +529,12 @@ FREDDIE_MAC = {
                     "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4"},
                 },
                 "2_unit": {
-                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4", "notes": "More generous than Fannie (85%)"},
-                    "arm":   {"max_ltv": 85, "max_cltv": 85, "citation": "Section 4201.4"},
+                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4 (updated Sep 2025)", "notes": "95% for LPA-approved loans. Updated effective 9/29/2025."},
+                    "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4 (updated Sep 2025)"},
                 },
                 "3_4_unit": {
-                    "fixed": {"max_ltv": 80, "max_cltv": 80, "citation": "Section 4201.4"},
-                    "arm":   {"max_ltv": 75, "max_cltv": 75, "citation": "Section 4201.4"},
+                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4 (updated Sep 2025)", "notes": "Increased from 80% to 95% for LPA-approved loans. Effective 9/29/2025."},
+                    "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4 (updated Sep 2025)"},
                 },
                 "condo": {
                     "fixed": {"max_ltv": 97, "max_cltv": 97, "citation": "Section 5601, Condo Eligibility"},
@@ -569,12 +569,12 @@ FREDDIE_MAC = {
                     "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4"},
                 },
                 "2_unit": {
-                    "fixed": {"max_ltv": 85, "max_cltv": 85, "citation": "Section 4201.4"},
-                    "arm":   {"max_ltv": 85, "max_cltv": 85, "citation": "Section 4201.4"},
+                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4 (updated Sep 2025)"},
+                    "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4 (updated Sep 2025)"},
                 },
                 "3_4_unit": {
-                    "fixed": {"max_ltv": 75, "max_cltv": 75, "citation": "Section 4201.4"},
-                    "arm":   {"max_ltv": 75, "max_cltv": 75, "citation": "Section 4201.4"},
+                    "fixed": {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4 (updated Sep 2025)"},
+                    "arm":   {"max_ltv": 95, "max_cltv": 95, "citation": "Section 4201.4 (updated Sep 2025)"},
                 },
             },
             "second_home": {
@@ -957,9 +957,9 @@ FHA = {
         },
         "manual_with_compensating": {
             "front_end": 40,
-            "back_end": 50,
+            "back_end": 56.99,
             "citation": "HUD 4000.1, II.A.5.d",
-            "notes": "With compensating factors: up to 40% / 50%"
+            "notes": "With strong compensating factors (reserves, residual income, minimal payment increase), manual underwriting back-end can reach up to 56.99%. Common thresholds: 40/50 with standard compensating, 40/56.99 with strong compensating."
         },
         "manual_energy_efficient": {
             "front_end": 33,
@@ -1117,16 +1117,17 @@ FHA = {
     },
 
     # ----- STUDENT LOAN DTI TREATMENT -----
+    # UPDATED per ML 2021-13 (effective Aug 16, 2021): FHA student loan calc changed from 1% to 0.5%
     "student_loans": {
         "deferred_or_ibr": {
-            "monthly_payment_calc": "1% of outstanding balance OR actual documented payment, whichever is greater",
-            "if_no_payment_reported": "Use 1% of outstanding balance",
+            "monthly_payment_calc": "0.5% of outstanding balance OR actual documented payment, whichever is greater",
+            "if_no_payment_reported": "Use 0.5% of outstanding balance",
             "if_ibr_payment_greater_than_zero": "Use actual IBR/IDR/PAYE payment if documented and > $0",
-            "if_ibr_payment_is_zero": "Use 1% of outstanding balance (cannot use $0)",
-            "fully_deferred": "Use 1% of outstanding balance",
-            "forbearance": "Use 1% of outstanding balance",
-            "citation": "HUD 4000.1, II.A.4.c.ii(E), Student Loans",
-            "notes": "FHA uses 1% (NOT 0.5% like conventional). If the payment is income-driven and > $0, the actual payment may be used. If the IDR payment is $0, must use 1% of balance."
+            "if_ibr_payment_is_zero": "Use 0.5% of outstanding balance (cannot use $0)",
+            "fully_deferred": "Use 0.5% of outstanding balance",
+            "forbearance": "Use 0.5% of outstanding balance",
+            "citation": "ML 2021-13; HUD 4000.1, II.A.4.c.ii(E) (revised)",
+            "notes": "Updated per ML 2021-13: FHA now uses 0.5% of outstanding balance (previously was 1%). Same as conventional. If IDR payment > $0, actual payment may be used."
         },
         "standard_repayment": {
             "monthly_payment_calc": "Use actual monthly payment from credit report or documentation",
