@@ -98,6 +98,12 @@ RULE_ENGINE_PATTERNS = [
     (r"(?:bankruptcy|foreclosure|short\s+sale|deed.in.lieu)\s*.*(?:waiting\s+period|how\s+(?:long|many\s+years))", "derogatory_event"),
     (r"(?:chapter\s+(?:7|13)\s+(?:bankruptcy|waiting|period))", "derogatory_event"),
 
+    # Borrower eligibility / citizenship / visa status (CRITICAL: rule engine has updated ML 2025-09 data)
+    (r"(?:h1b|h-1b|h1.b|l1|l-1|f1|f-1|opt|daca)\s*.*(?:fha|loan|mortgage|eligible|qualify)", "borrower_eligibility"),
+    (r"(?:fha|hud)\s*.*(?:h1b|h-1b|visa|non.citizen|non.permanent|citizen|green\s*card|immigrant|lawful)", "borrower_eligibility"),
+    (r"(?:visa|non.citizen|non.permanent\s+resident|immigrant)\s*.*(?:fha|eligible|qualify|loan)", "borrower_eligibility"),
+    (r"(?:who\s+(?:is|can)\s+(?:be\s+)?eligible|who\s+(?:can|qualif))\s*.*(?:fha)", "borrower_eligibility"),
+
     # Specific numbers / scenarios (low priority — only adds context)
     (r"(?:\d+)\s*(?:unit|bedroom|year|month)", "scenario"),
     (r"(?:purchase|refi|refinance|cash.out|streamline|irrrl)", "scenario"),
@@ -251,7 +257,7 @@ def classify_query(query: str) -> Dict[str, Any]:
     SPECIFIC_TYPES = {"ltv", "dti", "credit_score", "mi", "mip",
                       "funding_fee", "reserves", "residual_income",
                       "loan_limit", "eligibility", "comparison",
-                      "derogatory_event"}
+                      "derogatory_event", "borrower_eligibility"}
     all_matched_types = []
     type_match_count = {}
     for pattern, rule_type in RULE_ENGINE_PATTERNS:
@@ -268,7 +274,7 @@ def classify_query(query: str) -> Dict[str, Any]:
     TYPE_PRIORITY = {
         "funding_fee": 10, "mip": 10, "mi": 9, "residual_income": 9,
         "reserves": 8, "loan_limit": 8, "credit_score": 7, "dti": 7,
-        "derogatory_event": 6, "ltv": 5, "eligibility": 3, "comparison": 3,
+        "borrower_eligibility": 11, "derogatory_event": 6, "ltv": 5, "eligibility": 3, "comparison": 3,
     }
     if all_matched_types:
         specific_matches = {t: c for t, c in type_match_count.items() if t in SPECIFIC_TYPES}
@@ -401,7 +407,7 @@ def classify_query(query: str) -> Dict[str, Any]:
     # When a specific rule type with deterministic data (like derogatory_event)
     # was identified but the query got routed to pure RAG, upgrade to HYBRID
     # so the rule engine's exact data supplements the RAG answer.
-    specific_with_data = {"derogatory_event", "funding_fee", "mip", "mi"}
+    specific_with_data = {"derogatory_event", "funding_fee", "mip", "mi", "borrower_eligibility"}
     if matched_rule_type in specific_with_data and route == ROUTE_RAG:
         route = ROUTE_HYBRID
         confidence = min(0.9, 0.5 + (rule_score + rag_score) * 0.05)
@@ -837,6 +843,31 @@ def _execute_rule_engine(rule_type: str, params: dict, query: str) -> Tuple[str,
         loan = params.get("loan_amount", 300000)
         r = lookup_va_residual_income(state, family, loan)
         return str(r), [r.citation]
+
+    elif rule_type == "borrower_eligibility":
+        # CRITICAL: Mortgagee Letter 2025-09 changed FHA eligibility for non-citizens
+        agency = params.get("agency", "FHA")
+        agency_data = ALL_AGENCIES.get(agency, {})
+        elig = agency_data.get("borrower_eligibility", {})
+        if elig:
+            lines = [f"\n**{agency} Borrower Eligibility (Residency/Citizenship):**"]
+            lines.append(f"\n⚠️ CRITICAL UPDATE — Effective {elig.get('effective_date', 'May 25, 2025')} (per {elig.get('citation', 'Mortgagee Letter 2025-09')})")
+            lines.append(f"\n**ELIGIBLE residency statuses:**")
+            for status in elig.get("eligible_residency_status", []):
+                lines.append(f"  ✅ {status}")
+            lines.append(f"\n**INELIGIBLE residency statuses:**")
+            for status in elig.get("ineligible_residency_status", []):
+                lines.append(f"  ❌ {status}")
+            if elig.get("notes"):
+                lines.append(f"\n**Note:** {elig['notes']}")
+            if elig.get("alternatives_for_ineligible"):
+                lines.append(f"\n**Alternatives for ineligible borrowers:**")
+                for alt in elig["alternatives_for_ineligible"]:
+                    lines.append(f"  → {alt}")
+            citations.append(elig.get("citation", ""))
+            return "\n".join(lines), citations
+        else:
+            return f"No borrower eligibility data found for {agency}.", citations
 
     elif rule_type == "derogatory_event":
         # Look up waiting periods from all agencies (or specific agency if provided)

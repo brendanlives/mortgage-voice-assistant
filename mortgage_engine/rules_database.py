@@ -1028,6 +1028,38 @@ FHA = {
         "citation": "HUD 4000.1, II.A.1",
     },
 
+    # ----- BORROWER ELIGIBILITY (Residency/Citizenship) -----
+    # CRITICAL UPDATE: Mortgagee Letter 2025-09 (effective May 25, 2025)
+    # removed non-permanent resident alien eligibility for FHA loans.
+    "borrower_eligibility": {
+        "eligible_residency_status": [
+            "U.S. citizen",
+            "Lawful permanent resident (green card holder)",
+            "Citizen of Federated States of Micronesia",
+            "Citizen of Republic of Marshall Islands",
+            "Citizen of Republic of Palau",
+        ],
+        "ineligible_residency_status": [
+            "H1B visa holder",
+            "L1 visa holder",
+            "F1 visa holder (including OPT)",
+            "Any non-immigrant temporary visa holder",
+            "Non-permanent resident alien",
+            "DACA recipients",
+            "Undocumented individuals",
+        ],
+        "effective_date": "May 25, 2025",
+        "applies_to": "Case numbers assigned on or after May 25, 2025",
+        "verification": "Lender must verify residency status using USCIS documents. SSN card alone is insufficient.",
+        "citation": "Mortgagee Letter 2025-09; HUD 4000.1 (revised)",
+        "notes": "Prior to May 25, 2025, non-permanent resident aliens with valid EADs were eligible. This is no longer the case. H1B, L1, F1, OPT, and other temporary visa holders must pursue conventional, non-QM, or other non-FHA mortgage options.",
+        "alternatives_for_ineligible": [
+            "Conventional loans (Fannie Mae/Freddie Mac) — H1B holders remain eligible with valid work authorization",
+            "Non-QM loans from specialized lenders",
+            "VA loans (if eligible veteran, regardless of citizenship)",
+        ],
+    },
+
     "special_programs": {
         "fha_203k_standard": {
             "max_ltv": 96.5,
