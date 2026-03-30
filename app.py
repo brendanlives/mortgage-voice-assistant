@@ -1302,6 +1302,220 @@ def cleanup_stale_chunks():
     })
 
 
+# ── ADMIN: BULK UPLOAD VERIFIED GUIDELINE CHUNKS ────────────────────────────────
+# Chunks built from verified official update letters (MLs, SELs, Bulletins, Circulars).
+# These are authoritative because they come from the actual letters, not handbook scrapes.
+
+VERIFIED_CHUNKS = [
+    # ──── FANNIE MAE (from SEL-2025-08, SEL-2025-09, SEL-2025-10, SEL-2026-01, SEL-2026-02) ────
+    {
+        "id": "verified_fnma_adu_rental_income",
+        "text": "FANNIE MAE ADU RENTAL INCOME (SEL-2025-08, effective October 8, 2025): Fannie Mae now allows rental income from an Accessory Dwelling Unit (ADU) to be used as qualifying income. Requirements: (1) Property must be a 1-unit principal residence, (2) Transaction must be purchase or limited cash-out refinance, (3) Rental income may only be derived from ONE ADU even if multiple ADUs exist on the property, (4) ADU rental income is CAPPED at 30% of the borrower's total qualifying income, (5) A Single-Family Comparable Rent Schedule (Form 1007) is required — if comparable ADU rentals cannot be found, appraiser may use similar non-ADU rental properties with adjustments, (6) DU version 12.1 (Q1 2026) will include ADU rental income eligibility — until then, manual underwriting only.",
+        "source": "SEL-2025-08; B3-3.8-01 (revised 10/08/2025)",
+        "agency": "Fannie Mae",
+    },
+    {
+        "id": "verified_fnma_limited_cashout_refi",
+        "text": "FANNIE MAE LIMITED CASH-OUT REFINANCE CASH BACK UPDATE (SEL-2025-08, effective October 8, 2025): The maximum cash back a borrower may receive in a limited cash-out refinance was changed from 'the lesser of 2% of the new UPB or $2,000' to 'the GREATER of 1% of the new UPB or $2,000.' This is a significant improvement for borrowers with larger loan balances. Example: on a $400,000 loan, max cash back is now $4,000 (1% of UPB) vs the old $2,000 cap.",
+        "source": "SEL-2025-08; B2-1.3-02 (revised 10/08/2025)",
+        "agency": "Fannie Mae",
+    },
+    {
+        "id": "verified_fnma_credit_score_floor_removed",
+        "text": "FANNIE MAE CREDIT SCORE FLOOR REMOVED (SEL-2025-09, effective November 16, 2025): Fannie Mae NO LONGER requires a minimum 620 credit score for DU-approved loans. Desktop Underwriter now performs a comprehensive risk analysis without a hard credit score floor. This means DU can approve borrowers with scores below 620 if other risk factors (reserves, LTV, DTI, etc.) are strong enough. Manual underwriting STILL requires a minimum 620 representative credit score. Individual lenders may continue to impose their own overlay minimums (commonly 620-640). IMPORTANT: Freddie Mac STILL requires a minimum 620 credit score — only Fannie Mae removed the floor.",
+        "source": "SEL-2025-09; B3-5.1-01 (revised Nov 2025)",
+        "agency": "Fannie Mae",
+    },
+    {
+        "id": "verified_fnma_homestyle_renovation",
+        "text": "FANNIE MAE HOMESTYLE RENOVATION UPDATES (SEL-2025-10, effective November 25, 2025): Updated HomeStyle Renovation financing policies including: expanded eligible upfront disbursements, removed outdated cost caps for manufactured homes, and enhanced guidance on limited cash-out refinancing for HomeStyle Renovation loans. These changes provide more flexibility for renovation lending.",
+        "source": "SEL-2025-10; B5-3.2 HomeStyle Renovation (revised Nov 2025)",
+        "agency": "Fannie Mae",
+    },
+    {
+        "id": "verified_fnma_income_docs_simplified",
+        "text": "FANNIE MAE INCOME DOCUMENTATION SIMPLIFIED (SEL-2026-02, effective March 4, 2026 — must implement by June 1, 2026): Chapter B3-3 (Income Assessment) was restructured. KEY CHANGES: (1) Fixed base income now requires only the most recent W-2 and pay stub (previously required W-2s for past 2 years plus pay stub), (2) Variable base income also now requires only the most recent W-2 and pay stub (same reduction), (3) Automobile allowance history requirement reduced from 2 years to 1 year (aligned with housing allowance). The chapter was reorganized into modular format with standard tables for each income type consolidating documentation, history, continuity, and calculation requirements.",
+        "source": "SEL-2026-02; B3-3 Income Assessment (revised 03/04/2026)",
+        "agency": "Fannie Mae",
+    },
+    {
+        "id": "verified_fnma_2026_loan_limits",
+        "text": "FANNIE MAE 2026 CONFORMING LOAN LIMITS (effective January 1, 2026, per FHFA): Baseline conforming limits: 1-unit $832,750, 2-unit $1,066,250, 3-unit $1,288,800, 4-unit $1,601,750. High-cost area ceiling: 1-unit $1,249,125, 2-unit $1,599,375, 3-unit $1,933,200, 4-unit $2,402,625. Alaska, Hawaii, Guam, and US Virgin Islands: 50% higher than baseline. This represents a 3.26% increase over 2025 limits ($806,500 baseline).",
+        "source": "FHFA 2026 Conforming Loan Limit Announcement; Fannie Mae LL-2025",
+        "agency": "Fannie Mae",
+    },
+    {
+        "id": "verified_fnma_multiunit_ltv_95",
+        "text": "FANNIE MAE 2-4 UNIT PRIMARY RESIDENCE LTV INCREASE (effective November 18, 2023): For purchase and rate/term refinance transactions on owner-occupied 2-4 unit properties with DU approval, maximum LTV/CLTV is 95% for ALL unit counts (2-unit, 3-unit, and 4-unit). This was an increase from prior limits of 85% (2-unit) and 75% (3-4 unit). Manual underwriting retains the prior lower limits. High-balance loans are excluded. Investment property limits remain unchanged (85% 1-unit, 75% 2-4 unit). Minimum 5% down payment for 2-4 unit primary with DU.",
+        "source": "B2-1.1-01, Eligibility Matrix (updated Nov 2023)",
+        "agency": "Fannie Mae",
+    },
+    {
+        "id": "verified_fnma_h1b_eligible",
+        "text": "FANNIE MAE H1B/NON-PERMANENT RESIDENT ELIGIBILITY: H1B visa holders ARE eligible for Fannie Mae conventional loans on the same terms as U.S. citizens per B2-2-02. Requirements: valid SSN, current verified immigration status (H1B qualifies), lender warrants legal presence at delivery. No LTV penalties based on citizenship. Income continuance documentation is NOT required solely because the borrower is a non-permanent resident for standard employment income. However, lenders should confirm the H1B is not expiring imminently and employment with the sponsoring employer is ongoing.",
+        "source": "B2-2-02, Non-U.S. Citizen Borrower Eligibility",
+        "agency": "Fannie Mae",
+    },
+
+    # ──── FREDDIE MAC (from Bulletins 2025-1 through 2025-16) ────
+    {
+        "id": "verified_fhlmc_2026_loan_limits",
+        "text": "FREDDIE MAC 2026 CONFORMING LOAN LIMITS (Bulletin 2025-16, effective January 1, 2026): Baseline conforming limits: 1-unit $832,750, 2-unit $1,066,250, 3-unit $1,288,800, 4-unit $1,601,750. High-cost area ceiling: 1-unit $1,249,125, 2-unit $1,599,375, 3-unit $1,933,200, 4-unit $2,402,625. This represents a 3.26% increase over 2025. Guide sections impacted: 4203.1 and 4603.2. Loan Product Advisor and Loan Selling Advisor updated December 7, 2025.",
+        "source": "Bulletin 2025-16; Sections 4203.1, 4603.2",
+        "agency": "Freddie Mac",
+    },
+    {
+        "id": "verified_fhlmc_multiunit_ltv_95",
+        "text": "FREDDIE MAC 2-4 UNIT PRIMARY RESIDENCE LTV INCREASE (effective September 29, 2025): For purchase and rate/term refinance transactions on owner-occupied 2-4 unit properties with LPA approval, maximum LTV/CLTV is 95% for ALL unit counts (2-unit, 3-unit, and 4-unit). This was an increase from prior limits of 85%/95% (2-unit) and 80%/75% (3-4 unit). Investment property limits remain unchanged (85% 1-unit, 75% 2-4 unit). Minimum 5% down payment for 2-4 unit primary with LPA.",
+        "source": "Section 4201.4 (updated Sep 2025)",
+        "agency": "Freddie Mac",
+    },
+    {
+        "id": "verified_fhlmc_resale_restrictions",
+        "text": "FREDDIE MAC RESALE RESTRICTION VALUATION UPDATE (Bulletin 2025-16, effective March 3, 2026): Updated requirements for determining property value for mortgages secured by properties subject to resale restrictions that terminate upon foreclosure. For PURCHASE with income-based resale restrictions: use appraised value. For PURCHASE with non-income-based resale restrictions: use lesser of appraised value or purchase price. For REFINANCE (all restriction types): use appraised value. Guide sections impacted: 4203.1 and 4406.5.",
+        "source": "Bulletin 2025-16; Sections 4203.1, 4406.5",
+        "agency": "Freddie Mac",
+    },
+    {
+        "id": "verified_fhlmc_h1b_eligible",
+        "text": "FREDDIE MAC H1B/NON-PERMANENT RESIDENT ELIGIBILITY: H1B visa holders ARE eligible for Freddie Mac conventional loans. Non-permanent resident aliens who are legally present in the United States are eligible on the same terms as U.S. citizens. Requirements: valid SSN, documented legal presence. No LTV restrictions based on immigration status.",
+        "source": "Section 4501.5, Non-U.S. Citizen Borrower Eligibility",
+        "agency": "Freddie Mac",
+    },
+
+    # ──── FHA (from ML 2025-09, ML 2024-13, ML 2021-13, ML 2025-23, ML 2025-08) ────
+    {
+        "id": "verified_fha_h1b_ineligible",
+        "text": "FHA BORROWER ELIGIBILITY UPDATE — H1B INELIGIBLE (Mortgagee Letter 2025-09, effective May 25, 2025): Non-permanent resident aliens (including H1B, L1, F1, OPT, DACA holders) are NO LONGER ELIGIBLE for FHA-insured loans. Only the following are eligible: U.S. citizens, lawful permanent residents (green card holders), and citizens of Federated States of Micronesia, Republic of Marshall Islands, and Republic of Palau. Social Security cards alone are insufficient to prove immigration status — USCIS documentation is required. This SUPERSEDES all prior FHA guidance on non-permanent resident alien eligibility. Alternatives for ineligible borrowers: conventional loans (Fannie/Freddie still accept H1B), non-QM loans, VA loans (if eligible veteran).",
+        "source": "ML 2025-09; HUD 4000.1 (revised May 2025)",
+        "agency": "FHA",
+    },
+    {
+        "id": "verified_fha_203k_limits_updated",
+        "text": "FHA 203(K) REHABILITATION PROGRAM UPDATES (Mortgagee Letter 2024-13, effective November 4, 2024): LIMITED 203(k): Maximum rehabilitation cost increased to $75,000 (from $35,000). Rehabilitation period extended to 9 months (from 6 months). Consultant fees may now be financed. STANDARD 203(k): Minimum repair cost remains $5,000. Maximum is the FHA loan limit for the area. Rehabilitation period extended to 12 months. HUD 203(k) consultant is required for Standard but optional for Limited.",
+        "source": "ML 2024-13; HUD 4000.1, II.A.8.h (revised Nov 2024)",
+        "agency": "FHA",
+    },
+    {
+        "id": "verified_fha_student_loans_half_pct",
+        "text": "FHA STUDENT LOAN DTI CALCULATION UPDATE (Mortgagee Letter 2021-13, effective August 16, 2021): For student loans in deferment, forbearance, or income-based repayment (IBR/IDR/PAYE): use 0.5% of the outstanding balance OR the actual documented monthly payment, whichever is greater. If the IBR/IDR payment is $0, use 0.5% of the outstanding balance (cannot use $0). For student loans in standard repayment, use the actual monthly payment from the credit report. This SUPERSEDES the prior 1% calculation rule. FHA now uses the same 0.5% as conventional (Fannie Mae/Freddie Mac).",
+        "source": "ML 2021-13; HUD 4000.1, II.A.4.c.ii(E) (revised)",
+        "agency": "FHA",
+    },
+    {
+        "id": "verified_fha_2026_loan_limits",
+        "text": "FHA 2026 LOAN LIMITS (Mortgagee Letter 2025-23, effective January 1, 2026): FHA floor (low-cost areas): $541,287 (65% of conforming $832,750). FHA ceiling (high-cost areas): $1,249,125 (150% of conforming). Limits vary by county/MSA — always verify the specific county limit on HUD's website. Special areas (Alaska, Hawaii, Guam, US Virgin Islands): ceiling is $1,873,688.",
+        "source": "ML 2025-23; HUD 4000.1, II.A.2",
+        "agency": "FHA",
+    },
+    {
+        "id": "verified_fha_departure_residence_25pct",
+        "text": "FHA DEPARTURE RESIDENCE — 25% EQUITY REQUIREMENT (HUD 4000.1, II.A.4.c.ii(H)): FHA REQUIRES at least 25% documented equity in a departing primary residence before rental income can be used to offset the mortgage payment. If borrower has LESS than 25% equity, the full PITIA is counted as a DTI liability with ZERO rental income offset — even if the borrower has a signed lease. This is the CRITICAL difference from conventional (Fannie Mae and Freddie Mac have NO equity requirement). Exception: the 25% equity requirement may be waived if borrower is relocating for employment (new job more than 100 miles from current residence). Do NOT conflate this with rules about having two FHA loans simultaneously (related but separate issue under HUD 4000.1 II.A.1.b.ii(B)).",
+        "source": "HUD 4000.1, II.A.4.c.ii(H); II.A.1.b.ii(B)",
+        "agency": "FHA",
+    },
+    {
+        "id": "verified_fha_appraisal_mls_rescinded",
+        "text": "FHA APPRAISAL POLICY — MULTIPLE MORTGAGEE LETTERS RESCINDED (Mortgagee Letter 2025-08, effective March 19, 2025): FHA rescinded multiple appraisal-related Mortgagee Letters to streamline and consolidate appraisal policy. This simplifies the appraisal requirements by eliminating overlapping or outdated guidance. Current appraisal requirements are now consolidated in HUD 4000.1.",
+        "source": "ML 2025-08; HUD 4000.1 (revised March 2025)",
+        "agency": "FHA",
+    },
+
+    # ──── VA (from Circulars 26-23-06, 26-25-7, 26-25-10, 26-24-17) ────
+    {
+        "id": "verified_va_funding_fee_schedule",
+        "text": "VA FUNDING FEE SCHEDULE (Circular 26-23-06, effective April 7, 2023 through November 14, 2031): PURCHASE/CONSTRUCTION — First Use: 2.15% (no down payment), 1.50% (5%+ down), 1.25% (10%+ down). Subsequent Use: 3.30% (no down payment), 1.50% (5%+ down), 1.25% (10%+ down). CASH-OUT REFINANCE — First Use: 2.15%, Subsequent Use: 3.30%. IRRRL (Streamline Refinance): 0.50% for all uses. LOAN ASSUMPTIONS: 0.50%. MANUFACTURED HOME (not permanently affixed): 1.00%. Reserves/National Guard pay the SAME rates as regular military (parity established). EXEMPT from funding fee: veterans receiving VA disability compensation, veterans rated eligible for compensation but receiving retirement pay, surviving spouses of veterans who died in service or from service-connected disability, active duty Purple Heart recipients. The funding fee is tax-deductible as mortgage interest and can be financed into the loan amount.",
+        "source": "Circular 26-23-06 Exhibit B; 38 USC 3729(b)(2)",
+        "agency": "VA",
+    },
+    {
+        "id": "verified_va_energy_efficiency",
+        "text": "VA ENERGY EFFICIENCY UNDERWRITING (Circular 26-25-7, effective September 22, 2025): Per the Joseph Maxwell Cleland and Robert Dole Memorial Veterans Benefits and Health Care Improvement Act of 2022, lenders may use a property's energy efficiency rating as a compensating factor during VA underwriting. If a RESNET HERS report (or other approved energy efficiency report) shows potential utility expense savings, the lender may consider the cost savings as a compensating factor for residual income calculation (per VA Lenders Handbook Ch. 4 Topic 10 Section d). The lender notes this on VA Form 26-6393 in the Remarks section. Energy efficiency reports should be dated within 12 months of closing. The report validity is tied to family size vs bedrooms — cannot use this compensating factor if family size exceeds bedrooms plus one. Lenders are NOT to reduce maintenance/utilities expenses in the residual income calculation — this is purely a compensating factor.",
+        "source": "Circular 26-25-7; 38 USC 3710(i)",
+        "agency": "VA",
+    },
+    {
+        "id": "verified_va_2026_loan_limits",
+        "text": "VA 2026 LOAN LIMITS (Circular 26-25-10, effective January 1, 2026): For veterans with FULL entitlement (no prior VA loan default or active VA loan): there is NO loan limit — VA will guaranty any amount the lender approves. For veterans with PARTIAL (reduced) entitlement: county-level conforming loan limits apply. Baseline: $832,750. High-cost areas: up to $1,249,125. Veterans with partial entitlement borrowing above the county limit may need a down payment for the portion above the guaranty. The Blue Water Navy Vietnam Veterans Act of 2019 eliminated loan limits for full-entitlement veterans effective January 1, 2020.",
+        "source": "Circular 26-25-10; FHFA 2026 CLL",
+        "agency": "VA",
+    },
+    {
+        "id": "verified_va_borrower_eligibility",
+        "text": "VA LOAN BORROWER ELIGIBILITY — WHO CAN USE VA ENTITLEMENT: Only the following individuals may use VA home loan entitlement: (1) Veterans with qualifying military service and honorable/general discharge, (2) Active duty service members after minimum service requirement, (3) National Guard/Reserve members with 6+ years of service or who were called to active duty, (4) Surviving unremarried spouses of veterans who died in service or from service-connected disability (or remarried after age 57). IMPORTANT: The veteran must be ON the loan — a non-veteran spouse alone cannot use the veteran's entitlement. A Certificate of Eligibility (COE) is required. VA does NOT require U.S. citizenship — eligibility is based on military service, not immigration status.",
+        "source": "VA Pamphlet 26-7, Ch. 3; 38 USC 3702",
+        "agency": "VA",
+    },
+    {
+        "id": "verified_va_non_occ_coborrower",
+        "text": "VA NON-OCCUPANT CO-BORROWER RULES: VA loan co-borrower options are very limited compared to conventional and FHA. Only the veteran's SPOUSE or ANOTHER ELIGIBLE VETERAN can be a co-borrower on a VA loan. Civilian non-veterans (parents, siblings, cousins, friends) CANNOT be non-occupant co-borrowers on VA loans. VA does allow a joint loan with a non-veteran, but the VA guaranty only covers the veteran's portion, resulting in a lower guaranty percentage and potentially requiring a down payment on the non-veteran's share. This is a critical difference from FHA (which allows both family and non-family co-signers at different LTVs) and conventional (which allows any individual as co-signer).",
+        "source": "VA Pamphlet 26-7, Ch. 3; 38 USC 3710",
+        "agency": "VA",
+    },
+
+    # ──── CROSS-AGENCY VERIFIED CHUNKS ────
+    {
+        "id": "verified_cross_agency_departure_residence",
+        "text": "DEPARTURE RESIDENCE RENTAL INCOME — CROSS-AGENCY COMPARISON: CONVENTIONAL (Fannie Mae/Freddie Mac): Executed lease + rent comp (Form 1007) OR executed lease + 2 months bank statements showing rent deposits. NO security deposit required. NO equity requirement. 75% of gross rent minus PITIA = net rental income/loss. FHA: REQUIRES 25% documented equity in the departing residence. If equity is below 25%, full PITIA is counted as liability with ZERO rental offset even with a lease. Exception for 100+ mile employment relocation. VA: Executed lease + rent comp. NO equity requirement. 75% of gross rent minus PITIA. ALL AGENCIES: If no lease documentation exists, the full PITIA of the departing residence must be counted as a monthly liability with zero rental income offset.",
+        "source": "B3-3.1-08; Section 5306.1; HUD 4000.1 II.A.4.c.ii(H); VA Pamphlet 26-7 Ch. 4",
+        "agency": "All Agencies",
+    },
+    {
+        "id": "verified_cross_agency_gift_documentation",
+        "text": "GIFT FUND DOCUMENTATION — CROSS-AGENCY RULES: ALL AGENCIES require a signed gift letter (donor name, amount, relationship, property address, no repayment expected). Donor bank statements are NOT universally required — they are only needed when the transfer of funds cannot be verified through other documentation (wire confirmation, cashier's check, closing statement). All gift funds must be in US DOLLARS at closing. Foreign currency gifts must be converted to USD with conversion documented. Non-English documents require certified English translation. ELIGIBLE DONORS vary by agency: Fannie Mae allows relatives by blood/marriage/adoption, domestic partner, fiancé, employer, government entity, nonprofit. Freddie Mac is similar. FHA allows family members, employer, close friend with LOE, government agency, nonprofit. Cousin is NOT explicitly listed in HUD's family member definition.",
+        "source": "B3-4.3-04; Section 5501.2; HUD 4000.1 II.A.4.d.iii",
+        "agency": "All Agencies",
+    },
+    {
+        "id": "verified_cross_agency_non_occ_coborrower",
+        "text": "NON-OCCUPANT CO-BORROWER — CROSS-AGENCY COMPARISON: FANNIE MAE: Any individual can co-sign (no family requirement). Max LTV: 97% (1-unit), 95% (2-4 unit with DU). FREDDIE MAC: Any individual can co-sign (no family requirement). Max LTV: 95% (1-unit), 95% (2-4 unit with LPA). Manual UW: occupant max 35% housing ratio, 43% DTI. FHA: Both family and non-family non-occ co-borrowers are ALLOWED. Family member on 1-unit: standard 96.5% LTV. Non-family on 1-unit: LTV capped at 75%. Any non-occ (family or not) on 2-4 unit: 75% max LTV. Cousin is NOT in HUD's family definition. VA: Only veteran's spouse or another eligible veteran. Civilian non-veterans CANNOT co-sign VA loans.",
+        "source": "B2-2-04; Section 4201.17; HUD 4000.1 II.A.2.a; VA Pamphlet 26-7 Ch. 3",
+        "agency": "All Agencies",
+    },
+]
+
+
+@app.route("/api/admin/upload-verified-chunks", methods=["POST"])
+def upload_verified_chunks():
+    """Upload all verified guideline chunks from official update letters to Pinecone."""
+    index = get_pinecone_index()
+    if not index:
+        return jsonify({"error": "Pinecone not connected"}), 500
+
+    results = {"upserted": [], "errors": []}
+
+    for chunk in VERIFIED_CHUNKS:
+        try:
+            embedding = embed_query(chunk["text"])
+            if not embedding:
+                results["errors"].append(f"Could not embed: {chunk['id']}")
+                continue
+
+            index.upsert(vectors=[{
+                "id": chunk["id"],
+                "values": embedding,
+                "metadata": {
+                    "text": chunk["text"],
+                    "content": chunk["text"],
+                    "source": chunk["source"],
+                    "agency": chunk["agency"],
+                    "type": "verified_official_update",
+                    "verified_date": "2026-03-29",
+                    "priority": "high",
+                }
+            }])
+            results["upserted"].append({"id": chunk["id"], "agency": chunk["agency"]})
+        except Exception as e:
+            results["errors"].append(f"Error upserting {chunk['id']}: {str(e)}")
+
+    return jsonify({
+        "status": "complete",
+        "upserted_count": len(results["upserted"]),
+        "error_count": len(results["errors"]),
+        "details": results,
+    })
+
+
 # -- INCOME WORKBOOK FILLER -------------------------------------------------
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'static', 'income_workbook_template.xlsm')
 
