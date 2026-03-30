@@ -93,6 +93,15 @@ RULE_ENGINE_PATTERNS = [
     (r"(?:compare|comparison|versus|vs\.?|difference|better|which\s+(?:is|agency|program))", "comparison"),
     (r"(?:fannie|freddie|fha|va).+(?:\bvs\b|\bversus\b|\bor\b|\bcompared\b|\bdiffer)", "comparison"),
 
+    # Departure residence / vacating current home (rule engine has exact per-agency rules)
+    (r"(?:departure|departing)\s+(?:residence|property|home)", "departure_residence"),
+    (r"(?:vacat|vacating|leaving)\s+(?:my\s+)?(?:current|primary|existing)\s+(?:home|house|residence|property)", "departure_residence"),
+    (r"(?:current|existing|primary)\s+(?:home|house|residence|property)\s+.*(?:rent|vacat|move|leav|convert)", "departure_residence"),
+    (r"(?:rent|rental\s+income)\s+.*(?:departure|departing|current\s+(?:home|house|residence)|vacating)", "departure_residence"),
+    (r"(?:converting|convert)\s+(?:primary|my\s+(?:home|house))\s+(?:to\s+)?(?:rental|investment)", "departure_residence"),
+    (r"(?:move\s+out|moving\s+out)\s+.*(?:rent|lease|current\s+home)", "departure_residence"),
+    (r"(?:departure\s+residence)\s+(?:doc|rule|require|rental|income|equity)", "departure_residence"),
+
     # Derogatory events / waiting periods (rule engine has exact tables)
     (r"(?:waiting\s+period|how\s+long\s+(?:after|until|since|before))\s*.*(?:bankruptcy|foreclosure|short\s+sale|deed.in.lieu)", "derogatory_event"),
     (r"(?:bankruptcy|foreclosure|short\s+sale|deed.in.lieu)\s*.*(?:waiting\s+period|how\s+(?:long|many\s+years))", "derogatory_event"),
@@ -148,9 +157,10 @@ RAG_PATTERNS = [
     # Co-signer / co-borrower / non-occupant
     r"(?:co.sign|cosign|co.borrow|non.occupant|non.occupying|coborrower)",
 
-    # Occupancy change / vacating / converting
-    r"(?:vacat|converting|convert\s+(?:to|my)|current\s+(?:home|house|property).*(?:rent|vacat|move|leave))",
-    r"(?:moving\s+out|rent\s+(?:out|my)|departing\s+residence|primary\s+to\s+(?:rental|investment))",
+    # Occupancy change / vacating / converting — NOTE: departure_residence now handled by rule engine
+    # Only keep patterns that are clearly NOT about departure residence rules (e.g., general "can I rent out my house?" advice)
+    # r"(?:vacat|converting|convert\s+(?:to|my)|current\s+(?:home|house|property).*(?:rent|vacat|move|leave))",  # Moved to rule engine
+    # r"(?:moving\s+out|rent\s+(?:out|my)|departing\s+residence|primary\s+to\s+(?:rental|investment))",  # Moved to rule engine
 
     # Retirement / pension / Social Security / asset depletion income
     r"(?:retir|pension|social\s+security|ssa\b|401k|401\(k\)|ira\b|annuity|asset\s+depletion)",
@@ -257,7 +267,8 @@ def classify_query(query: str) -> Dict[str, Any]:
     SPECIFIC_TYPES = {"ltv", "dti", "credit_score", "mi", "mip",
                       "funding_fee", "reserves", "residual_income",
                       "loan_limit", "eligibility", "comparison",
-                      "derogatory_event", "borrower_eligibility"}
+                      "derogatory_event", "borrower_eligibility",
+                      "departure_residence"}
     all_matched_types = []
     type_match_count = {}
     for pattern, rule_type in RULE_ENGINE_PATTERNS:
@@ -274,7 +285,7 @@ def classify_query(query: str) -> Dict[str, Any]:
     TYPE_PRIORITY = {
         "funding_fee": 10, "mip": 10, "mi": 9, "residual_income": 9,
         "reserves": 8, "loan_limit": 8, "credit_score": 7, "dti": 7,
-        "borrower_eligibility": 11, "derogatory_event": 6, "ltv": 5, "eligibility": 3, "comparison": 3,
+        "departure_residence": 11, "borrower_eligibility": 11, "derogatory_event": 6, "ltv": 5, "eligibility": 3, "comparison": 3,
     }
     if all_matched_types:
         specific_matches = {t: c for t, c in type_match_count.items() if t in SPECIFIC_TYPES}
@@ -868,6 +879,65 @@ def _execute_rule_engine(rule_type: str, params: dict, query: str) -> Tuple[str,
             return "\n".join(lines), citations
         else:
             return f"No borrower eligibility data found for {agency}.", citations
+
+    elif rule_type == "departure_residence":
+        # Deterministic departure residence rules — per-agency differences are critical
+        agencies_to_check = [params["agency"]] if params.get("agency") else ["Fannie Mae", "Freddie Mac", "FHA", "VA"]
+        lines = []
+        for ag in agencies_to_check:
+            agency_data = ALL_AGENCIES.get(ag, {})
+            income_data = agency_data.get("income_rules", agency_data.get("income_calculation", {}))
+            dep = income_data.get("departure_residence", {})
+            if dep:
+                lines.append(f"\n**{ag} — Departure Residence Rules:**")
+                if dep.get("critical_rule"):
+                    lines.append(f"  ⚠️ CRITICAL: {dep['critical_rule']}")
+                # Equity requirement
+                eq = dep.get("equity_requirement", "None")
+                lines.append(f"  Equity Requirement: {eq}")
+                # Documentation
+                doc_opts = dep.get("documentation_options")
+                doc_list = dep.get("documentation")
+                if doc_opts:
+                    lines.append(f"  Documentation (choose one):")
+                    for opt in doc_opts:
+                        lines.append(f"    • {opt}")
+                elif doc_list:
+                    lines.append(f"  Documentation: {', '.join(doc_list) if isinstance(doc_list, list) else doc_list}")
+                # Security deposit note
+                if dep.get("security_deposit_NOT_required"):
+                    lines.append(f"  ✅ {dep['security_deposit_NOT_required']}")
+                # Factor / formula
+                factor = dep.get("factor")
+                if factor:
+                    lines.append(f"  Rental Income Factor: {int(factor*100)}% of gross rent")
+                formula = dep.get("formula")
+                if formula:
+                    lines.append(f"  Formula: {formula}")
+                # FHA-specific sub-rules
+                if dep.get("if_25pct_equity_met"):
+                    met = dep["if_25pct_equity_met"]
+                    lines.append(f"  IF 25% equity IS met: Rental income CAN offset mortgage ({int(met.get('factor',0.75)*100)}% factor)")
+                if dep.get("if_25pct_equity_NOT_met"):
+                    not_met = dep["if_25pct_equity_NOT_met"]
+                    lines.append(f"  IF 25% equity NOT met: {not_met.get('result', 'Full PITIA as liability, zero rental offset')}")
+                # No-lease fallback
+                if dep.get("if_no_lease"):
+                    lines.append(f"  If no lease: {dep['if_no_lease']}")
+                # Relocation exception
+                if dep.get("relocating_for_employment"):
+                    lines.append(f"  Relocation Exception: {dep['relocating_for_employment']}")
+                # Second FHA loan note
+                if dep.get("second_fha_loan_rules"):
+                    lines.append(f"  ⚠️ {dep['second_fha_loan_rules']}")
+                # Citation
+                cit = dep.get("citation", "")
+                if cit:
+                    lines.append(f"  📖 Citation: {cit}")
+                    citations.append(cit)
+        if lines:
+            return "\n".join(lines), citations
+        return "No departure residence rules found for the requested agency.", citations
 
     elif rule_type == "derogatory_event":
         # Look up waiting periods from all agencies (or specific agency if provided)
